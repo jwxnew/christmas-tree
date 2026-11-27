@@ -384,19 +384,19 @@ for (let i = 0; i < 650; i++) {
     starColors.push(color.r, color.g, color.b);
 }
 
-const starGeometry = new THREE.BufferGeometry();
+const starFieldGeometry = new THREE.BufferGeometry();
 
-starGeometry.setAttribute(
+starFieldGeometry.setAttribute(
     "position",
     new THREE.Float32BufferAttribute(starPositions, 3)
 );
 
-starGeometry.setAttribute(
+starFieldGeometry.setAttribute(
     "color",
     new THREE.Float32BufferAttribute(starColors, 3)
 );
 
-const starMaterial = new THREE.PointsMaterial({
+const starFieldMaterial = new THREE.PointsMaterial({
     size: 0.045,
     vertexColors: true,
     transparent: true,
@@ -407,7 +407,7 @@ const starMaterial = new THREE.PointsMaterial({
 });
 
 scene.add(
-    new THREE.Points(starGeometry, starMaterial)
+    new THREE.Points(starFieldGeometry, starFieldMaterial)
 );
 
 
@@ -1375,7 +1375,7 @@ function updateStar() {
 
 function updateStars() {
 
-    starMaterial.opacity =
+    starFieldMaterial.opacity =
         0.55 + 0.3 * (
             0.5 + 0.5 * Math.sin(elapsed * 1.2)
         );
