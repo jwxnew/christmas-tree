@@ -17,35 +17,44 @@ canvas{
  cursor:grab;touch-action:none;
 }
 canvas:active{cursor:grabbing}
+
+/* Merry Christmas：放在 YJL 下方 */
 #message{
  position:fixed;
- left:clamp(18px,5vw,85px);
- top:52%;
- transform:translateY(-50%);
+ left:50%;
+ bottom:3%;
+ top:auto;
+ transform:translateX(-50%);
  color:#f4dfff;
- font:italic clamp(22px,3vw,36px)
+ font:italic clamp(18px,2.5vw,30px)
  "Brush Script MT","Segoe Script",cursive;
  text-shadow:0 0 5px white,0 0 13px #d58bfa,
  0 0 28px #a34acb;
  white-space:nowrap;
  pointer-events:none;
 }
+
+/* YJL：放在第一行 */
 #signature{
- position:fixed;bottom:4%;
- left:50%;transform:translateX(-50%);
+ position:fixed;
+ bottom:9%;
+ left:50%;
+ transform:translateX(-50%);
  color:#f5eaff;
- font:italic clamp(22px,3vw,38px) Georgia,serif;
+ font:italic clamp(26px,4vw,42px) Georgia,serif;
  letter-spacing:.12em;
  text-shadow:0 0 8px white,0 0 20px #c38bdf;
  pointer-events:none;
+ white-space:nowrap;
 }
 </style>
 </head>
 <body>
 
 <canvas id="scene"></canvas>
-<div id="message">Merry Christmas</div>
+
 <div id="signature">for YJL</div>
+<div id="message">Merry Christmas</div>
 
 <script>
 const canvas=document.getElementById("scene");
@@ -78,7 +87,7 @@ function scale(){
  return Math.min(W/700,H/760)*.95*zoom;
 }
 
-// 粒子树主体：只分布在树体外层
+// 粒子树主体：分布在树体外层
 const tree=[];
 
 for(let i=0;i<2700;i++){
@@ -99,7 +108,7 @@ for(let i=0;i<2700;i++){
  });
 }
 
-// 树枝：分层向外延伸，形成自然树形
+// 树枝：分层向外延伸
 for(let level=0;level<8;level++){
  const t=(level+.5)/8.5;
  const radius=BASE_R*Math.pow(1-t,.86);
@@ -302,7 +311,7 @@ function drawRings(){
    "rgba(185,117,225,.35)":
    "rgba(223,193,245,.22)";
   ctx.lineWidth=1.1*s;
-  ctx.shadowColor="#bd76e7";
+  ctx.shadowColor="#bd76e8";
   ctx.shadowBlur=9;
   ctx.stroke();
   ctx.shadowBlur=0;
