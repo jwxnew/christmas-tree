@@ -45,7 +45,7 @@ canvas:active{cursor:grabbing}
 
 <canvas id="scene"></canvas>
 <div id="message">Merry Christmas</div>
-<div id="signature">for yjl</div>
+<div id="signature">for YJL</div>
 
 <script>
 const canvas=document.getElementById("scene");
@@ -381,54 +381,177 @@ function drawSpiral(){
  }
 }
 
-// 树顶星星
+// 树顶水晶星星
 function drawTopStar(){
- const p=project({x:0,y:-TREE_H-17,z:0});
- const r=12*scale();
+
+ const p=project({
+  x:0,
+  y:-TREE_H-22,
+  z:0
+ });
+
+ const s=scale();
+
+ // 呼吸闪烁
+ const pulse=1+0.08*Math.sin(time*2.2);
+
+ // 星星整体尺寸
+ const h=16*s*pulse;
+ const w=7.5*s*pulse;
 
  ctx.save();
  ctx.translate(p.x,p.y);
- ctx.rotate(time*.12);
 
- const gradient=ctx.createRadialGradient(0,0,0,0,0,r*3);
- gradient.addColorStop(0,"#ffffff");
- gradient.addColorStop(.3,"#fff8ff");
- gradient.addColorStop(1,"rgba(202,139,255,0)");
+ // 1. 外层柔光
+ const glow=ctx.createRadialGradient(
+  0,0,0,0,0,h*2.8
+ );
 
- ctx.fillStyle=gradient;
+ glow.addColorStop(0,"rgba(255,255,255,0.95)");
+ glow.addColorStop(0.2,"rgba(245,230,255,0.55)");
+ glow.addColorStop(0.45,"rgba(210,170,255,0.22)");
+ glow.addColorStop(1,"rgba(180,120,255,0)");
+
+ ctx.fillStyle=glow;
+
  ctx.beginPath();
- ctx.arc(0,0,r*3,0,TAU);
+ ctx.arc(0,0,h*2.8,0,TAU);
  ctx.fill();
 
+ // 2. 水晶钻石主体
  ctx.shadowColor="#ffffff";
- ctx.shadowBlur=24;
+ ctx.shadowBlur=20;
+
+ const crystal=ctx.createLinearGradient(
+  -w,-h,w,h*1.2
+ );
+
+ crystal.addColorStop(0,"rgba(255,255,255,0.98)");
+ crystal.addColorStop(0.35,"rgba(240,225,255,0.95)");
+ crystal.addColorStop(0.7,"rgba(210,185,255,0.9)");
+ crystal.addColorStop(1,"rgba(255,255,255,0.98)");
+
+ ctx.fillStyle=crystal;
+
+ ctx.beginPath();
+ ctx.moveTo(0,-h);
+ ctx.lineTo(w,0);
+ ctx.lineTo(0,h*1.25);
+ ctx.lineTo(-w,0);
+ ctx.closePath();
+ ctx.fill();
+
+ // 3. 内部水晶切面
+ ctx.shadowBlur=0;
+
+ ctx.strokeStyle="rgba(255,255,255,0.75)";
+ ctx.lineWidth=Math.max(0.8,1.1*s);
+
+ // 中轴线
+ ctx.beginPath();
+ ctx.moveTo(0,-h);
+ ctx.lineTo(0,h*1.25);
+ ctx.stroke();
+
+ // 左右切面
+ ctx.beginPath();
+ ctx.moveTo(0,-h*0.05);
+ ctx.lineTo(-w*0.82,0);
+ ctx.lineTo(0,h*0.62);
+ ctx.lineTo(w*0.82,0);
+ ctx.closePath();
+ ctx.stroke();
+
+ // 4. 顶部和底部高光
  ctx.fillStyle="#ffffff";
 
  ctx.beginPath();
- for(let i=0;i<10;i++){
-  const a=-Math.PI/2+i*Math.PI/5;
-  const rr=i%2===0?r:r*.25;
-  if(i===0)ctx.moveTo(Math.cos(a)*rr,Math.sin(a)*rr);
-  else ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr);
- }
- ctx.closePath();
+ ctx.arc(0,-h,1.9*s,0,TAU);
  ctx.fill();
+
+ ctx.beginPath();
+ ctx.arc(0,h*1.25,1.6*s,0,TAU);
+ ctx.fill();
+
+ // 5. 周围十字闪光
+ function sparkle(x,y,r,alpha){
+
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.globalAlpha=alpha;
+
+  ctx.strokeStyle="#ffffff";
+  ctx.lineWidth=Math.max(0.8,1*s);
+  ctx.shadowColor="#ffffff";
+  ctx.shadowBlur=8;
+
+  ctx.beginPath();
+
+  ctx.moveTo(-r,0);
+  ctx.lineTo(r,0);
+
+  ctx.moveTo(0,-r);
+  ctx.lineTo(0,r);
+
+  ctx.stroke();
+
+  ctx.beginPath();
+
+  ctx.moveTo(-r*0.6,-r*0.6);
+  ctx.lineTo(r*0.6,r*0.6);
+
+  ctx.moveTo(r*0.6,-r*0.6);
+  ctx.lineTo(-r*0.6,r*0.6);
+
+  ctx.stroke();
+
+  ctx.restore();
+ }
+
+ const tw=0.55+0.45*Math.sin(time*3.2);
+
+ sparkle(
+  -w*1.45,
+  -h*0.15,
+  3.4*s,
+  0.35+0.35*tw
+ );
+
+ sparkle(
+  w*1.55,
+  h*0.05,
+  2.8*s,
+  0.28+0.28*tw
+ );
+
+ sparkle(
+  0,
+  -h*1.45,
+  2.5*s,
+  0.22+0.25*tw
+ );
+
  ctx.restore();
 }
 
 // 树底暖金色光芒
 function drawBaseGlow(){
+
  const x=W/2;
  const y=H*.70;
  const s=scale();
 
- const g=ctx.createRadialGradient(x,y,0,x,y,55*s);
+ const g=ctx.createRadialGradient(
+  x,y,0,x,y,55*s
+ );
+
  g.addColorStop(0,"rgba(255,211,164,.75)");
  g.addColorStop(.18,"rgba(225,153,220,.38)");
  g.addColorStop(.5,"rgba(166,99,213,.12)");
  g.addColorStop(1,"rgba(0,0,0,0)");
 
  ctx.fillStyle=g;
+
  ctx.beginPath();
  ctx.arc(x,y,55*s,0,TAU);
  ctx.fill();
@@ -436,7 +559,9 @@ function drawBaseGlow(){
 
 // 主动画
 function animate(){
+
  requestAnimationFrame(animate);
+
  time+=.016;
 
  if(!dragging)targetYaw+=.0008;
@@ -447,6 +572,7 @@ function animate(){
  pitch=clamp(pitch,.08,1.05);
 
  ctx.clearRect(0,0,W,H);
+
  ctx.fillStyle="#020104";
  ctx.fillRect(0,0,W,H);
 
@@ -463,13 +589,18 @@ animate();
 
 // 鼠标拖动旋转
 canvas.addEventListener("pointerdown",e=>{
+
  dragging=true;
+
  lastX=e.clientX;
  lastY=e.clientY;
+
  canvas.setPointerCapture(e.pointerId);
+
 });
 
 canvas.addEventListener("pointermove",e=>{
+
  if(!dragging)return;
 
  targetYaw+=(e.clientX-lastX)*.007;
@@ -477,17 +608,25 @@ canvas.addEventListener("pointermove",e=>{
 
  lastX=e.clientX;
  lastY=e.clientY;
+
 });
 
-function stopDrag(){dragging=false;}
+function stopDrag(){
+ dragging=false;
+}
+
 canvas.addEventListener("pointerup",stopDrag);
 canvas.addEventListener("pointercancel",stopDrag);
 
 // 滚轮改变观察角度
 canvas.addEventListener("wheel",e=>{
+
  targetPitch=clamp(
-  targetPitch+e.deltaY*.0004,.08,1.05
+  targetPitch+e.deltaY*.0004,
+  .08,
+  1.05
  );
+
 },{passive:true});
 
 </script>
