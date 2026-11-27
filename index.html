@@ -1,671 +1,1540 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title></title>
+
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{
- width:100%;height:100%;
- overflow:hidden;background:#020104;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
-canvas{
- position:fixed;inset:0;
- width:100%;height:100%;
- cursor:grab;touch-action:none;
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #03010a;
 }
-canvas:active{cursor:grabbing}
+
+canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    touch-action: none;
+}
+
+canvas:active {
+    cursor: grabbing;
+}
 
 /* 第一行：for YJL */
-#signature{
- position:fixed;
- bottom:9%;
- left:50%;
- transform:translateX(-50%);
- color:#f5eaff;
- font:italic clamp(28px,4vw,44px) Georgia,serif;
- letter-spacing:.14em;
- text-shadow:0 0 8px white,0 0 20px #c38bdf,0 0 35px #8d58aa;
- pointer-events:none;
- white-space:nowrap;
+#signature {
+    position: fixed;
+    left: 50%;
+    bottom: 9%;
+    transform: translateX(-50%);
+    z-index: 5;
+
+    color: #f5eaff;
+    font: italic clamp(26px, 4vw, 43px) Georgia, serif;
+    letter-spacing: .15em;
+    white-space: nowrap;
+
+    text-shadow:
+        0 0 8px #ffffff,
+        0 0 20px #d8a4ff,
+        0 0 40px #9b54d8;
+
+    pointer-events: none;
 }
 
 /* 第二行：Merry Christmas */
-#message{
- position:fixed;
- left:50%;
- bottom:3%;
- transform:translateX(-50%);
- color:#f4dfff;
- font:italic clamp(18px,2.5vw,30px)
- "Brush Script MT","Segoe Script",cursive;
- text-shadow:0 0 5px white,0 0 13px #d58bfa,
- 0 0 28px #a34acb;
- white-space:nowrap;
- pointer-events:none;
+#message {
+    position: fixed;
+    left: 50%;
+    bottom: 3%;
+    transform: translateX(-50%);
+    z-index: 5;
+
+    color: #f0d9ff;
+    font: italic clamp(19px, 2.7vw, 31px)
+        "Brush Script MT", "Segoe Script", cursive;
+
+    white-space: nowrap;
+
+    text-shadow:
+        0 0 5px #ffffff,
+        0 0 13px #d58bfa,
+        0 0 30px #a34acb;
+
+    pointer-events: none;
 }
 </style>
 </head>
+
 <body>
 
 <canvas id="scene"></canvas>
+
 <div id="signature">for YJL</div>
 <div id="message">Merry Christmas</div>
 
 <script>
-const canvas=document.getElementById("scene");
-const ctx=canvas.getContext("2d");
 
-let W,H,D;
-let yaw=-0.24,pitch=0.30;
-let targetYaw=yaw,targetPitch=pitch;
-let zoom=1;
-let dragging=false,lastX=0,lastY=0;
-let time=0;
+/* ===================================
+   1. 基础参数
+=================================== */
 
-const TREE_H=270;          // 比之前略矮
-const BASE_R=118;          // 比之前更宽，树更粗壮
-const TAU=Math.PI*2;
-const rand=(a,b)=>a+Math.random()*(b-a);
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const canvas = document.getElementById("scene");
+const ctx = canvas.getContext("2d");
 
-function resize(){
- D=Math.min(devicePixelRatio||1,2);
- W=innerWidth;H=innerHeight;
- canvas.width=W*D;
- canvas.height=H*D;
- ctx.setTransform(D,0,0,D,0,0);
+let W, H, DPR;
+
+let yaw = -0.25;
+let pitch = 0.27;
+
+let targetYaw = yaw;
+let targetPitch = pitch;
+
+let zoom = 1;
+let dragging = false;
+
+let lastX = 0;
+let lastY = 0;
+
+let time = 0;
+let lastFrame = 0;
+
+const TREE_H = 300;
+const BASE_R = 128;
+
+const TAU = Math.PI * 2;
+
+const rand = (a, b) => a + Math.random() * (b - a);
+
+const clamp = (v, a, b) =>
+    Math.max(a, Math.min(b, v));
+
+
+/* ===================================
+   2. 画布自适应
+=================================== */
+
+function resize() {
+
+    W = window.innerWidth;
+    H = window.innerHeight;
+
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 }
-addEventListener("resize",resize);
+
+window.addEventListener("resize", resize);
+
 resize();
 
-function scale(){
- return Math.min(W/760,H/760)*.98*zoom;
+
+function scale() {
+
+    return Math.min(
+        W / 560,
+        H / 700,
+        1.35
+    ) * 0.98 * zoom;
 }
 
-/* =========================
-   树主体粒子（更粗壮）
-========================= */
-const tree=[];
-
-// 外层轮廓粒子：塑造树形
-for(let i=0;i<3400;i++){
- const t=Math.pow(Math.random(),.82);
- const radius=BASE_R*Math.pow(1-t,.76);
- const r=radius*rand(.72,1.03);
- const a=rand(0,TAU);
-
- tree.push({
-  x:r*Math.cos(a),
-  y:-t*TREE_H+rand(-3,3),
-  z:r*Math.sin(a),
-  size:rand(.38,1.55),
-  phase:rand(0,TAU),
-  speed:rand(.7,2.6),
-  color:Math.random()<.63?"#f5efff":
-        Math.random()<.55?"#dfbbf7":"#ba80db"
- });
+function baseY() {
+    return H * 0.70;
 }
 
-// 内层填充粒子：让树不再单薄
-for(let i=0;i<2500;i++){
- const t=Math.pow(Math.random(),.92);
- const radius=BASE_R*Math.pow(1-t,.78);
- const r=radius*Math.sqrt(Math.random())*.95;
- const a=rand(0,TAU);
 
- tree.push({
-  x:r*Math.cos(a),
-  y:-t*TREE_H+rand(-2,2),
-  z:r*Math.sin(a),
-  size:rand(.30,1.2),
-  phase:rand(0,TAU),
-  speed:rand(.8,2.2),
-  color:Math.random()<.72?"#fffaff":"#d8a9f2"
- });
-}
+/* ===================================
+   3. 圣诞树主体粒子
+   增加树体厚度和层次
+=================================== */
 
-// 分层枝条：让比例更像“树”
-for(let level=0;level<11;level++){
- const t=(level+.35)/11.6;
- const radius=BASE_R*Math.pow(1-t,.74);
+const tree = [];
 
- for(let branch=0;branch<14;branch++){
-  const angle=branch*TAU/14+level*.21;
-
-  for(let j=0;j<24;j++){
-   const u=j/23;
-   const r=radius*(0.12+u*.96);
-   const a=angle+u*.19;
-
-   tree.push({
-    x:r*Math.cos(a),
-    y:-t*TREE_H+u*10+rand(-1.6,1.6),
-    z:r*Math.sin(a),
-    size:rand(.4,1.45),
-    phase:rand(0,TAU),
-    speed:rand(.7,2.3),
-    color:Math.random()<.78?"#ffffff":"#d9aef2"
-   });
-  }
- }
-}
-
-/* =========================
-   树身螺旋灯带
-========================= */
-const spiral=[];
-for(let i=0;i<=820;i++){
- const t=i/820;
- const a=t*TAU*4.75;
- const r=BASE_R*Math.pow(1-t,.82)*1.02;
-
- spiral.push({
-  x:r*Math.cos(a),
-  y:-t*TREE_H,
-  z:r*Math.sin(a)
- });
-}
-
-const bulbs=[];
-for(let i=0;i<185;i++){
- const t=i/185;
- const a=t*TAU*4.75;
- const r=BASE_R*Math.pow(1-t,.82)*1.02;
-
- bulbs.push({
-  x:r*Math.cos(a),
-  y:-t*TREE_H,
-  z:r*Math.sin(a),
-  phase:rand(0,TAU),
-  size:rand(1.1,2.8)
- });
-}
-
-/* =========================
-   独立闪烁粒子
-========================= */
-const glitters=[];
-for(let i=0;i<220;i++){
- const t=rand(.04,.98);
- const r=BASE_R*Math.pow(1-t,.78)*rand(.55,1.08);
- const a=rand(0,TAU);
- glitters.push({
-  x:r*Math.cos(a),
-  y:-t*TREE_H,
-  z:r*Math.sin(a),
-  phase:rand(0,TAU),
-  size:rand(.8,2.8)
- });
-}
-
-/* =========================
-   背景星空
-========================= */
-const stars=[];
-for(let i=0;i<520;i++){
- stars.push({
-  x:rand(0,1),
-  y:rand(0,1),
-  size:rand(.25,1.35),
-  phase:rand(0,TAU)
- });
-}
-
-/* =========================
-   雪花（增多）
-========================= */
-const snow=[];
-for(let i=0;i<650;i++){
- snow.push({
-  x:rand(0,W),
-  y:rand(0,H),
-  size:rand(.35,2.1),
-  speed:rand(.35,1.9),
-  drift:rand(-.45,.45),
-  phase:rand(0,TAU)
- });
-}
-
-/* =========================
-   地面银河粒子
-========================= */
-const ground=[];
-for(let i=0;i<2100;i++){
- const a=rand(0,TAU);
- const r=BASE_R*rand(1.0,4.8);
-
- ground.push({
-  x:r*Math.cos(a),
-  y:rand(-1.2,1.2),
-  z:r*Math.sin(a),
-  size:rand(.35,1.5),
-  phase:rand(0,TAU)
- });
-}
-
-/* =========================
-   树周围环绕粒子轨道
-========================= */
-const orbiters=[
- {rx:BASE_R*1.45, rz:BASE_R*1.10, y:-TREE_H*0.22, amp:10, tilt:0.22, speed:0.65, color:"#f0d2ff", glow:"#d792ff"},
- {rx:BASE_R*1.18, rz:BASE_R*1.55, y:-TREE_H*0.48, amp:12, tilt:-0.18, speed:-0.52, color:"#ffffff", glow:"#f0d2ff"},
- {rx:BASE_R*1.65, rz:BASE_R*1.28, y:-TREE_H*0.70, amp:8, tilt:0.14, speed:0.44, color:"#dcb8f7", glow:"#c36ef1"}
+const treeColors = [
+    "#ffffff",
+    "#f8efff",
+    "#ead5ff",
+    "#d5aaff",
+    "#bd82ed",
+    "#a969d9"
 ];
 
-/* =========================
-   3D投影
-========================= */
-function project(p){
- const s=scale();
+// 树体主体：外层轮廓 + 内部填充
 
- const x1=p.x*Math.cos(yaw)-p.z*Math.sin(yaw);
- const z1=p.x*Math.sin(yaw)+p.z*Math.cos(yaw);
+for (let i = 0; i < 3800; i++) {
 
- const y1=p.y*Math.cos(pitch)-z1*Math.sin(pitch);
- const z2=p.y*Math.sin(pitch)+z1*Math.cos(pitch);
+    const t = Math.random();
 
- const focal=1180;
- const k=focal/(focal+z2);
+    const angle = rand(0, TAU);
 
- return {
-  x:W/2+x1*s*k,
-  y:H*.71+y1*s*k,
-  z:z2,
-  k
- };
+    const maxR = BASE_R * Math.pow(1 - t, 0.76);
+
+    let radial;
+
+    if (Math.random() < 0.58) {
+        radial = 0.75 + Math.random() * 0.25;
+    } else {
+        radial = Math.sqrt(Math.random()) * 0.88;
+    }
+
+    const branchWave =
+        0.92
+        + 0.08 * Math.sin(angle * 9 + t * 42)
+        + 0.025 * Math.cos(angle * 15 - t * 63);
+
+    const r = maxR * radial * branchWave;
+
+    const colorIndex =
+        Math.random() < 0.52 ? 0 :
+        Math.random() < 0.55 ? 1 :
+        Math.random() < 0.65 ? 2 :
+        Math.random() < 0.75 ? 3 :
+        Math.random() < 0.85 ? 4 : 5;
+
+    tree.push({
+
+        x: r * Math.cos(angle),
+
+        y: -t * TREE_H + rand(-3, 3),
+
+        z: r * Math.sin(angle),
+
+        size: rand(0.4, 1.55),
+
+        phase: rand(0, TAU),
+
+        speed: rand(0.7, 2.6),
+
+        color: treeColors[colorIndex],
+
+        sparkle: Math.random() > 0.93
+    });
 }
 
-/* =========================
-   基础发光点
-========================= */
-function dot(x,y,r,color,alpha,glow=false){
- ctx.globalAlpha=alpha;
- ctx.fillStyle=color;
 
- if(glow){
-  ctx.shadowColor=color;
-  ctx.shadowBlur=10;
- }
+/* ===================================
+   4. 分层树枝结构
+=================================== */
 
- ctx.beginPath();
- ctx.arc(x,y,Math.max(.25,r),0,TAU);
- ctx.fill();
+for (let level = 0; level < 8; level++) {
 
- ctx.shadowBlur=0;
- ctx.globalAlpha=1;
+    const t = (level + 0.35) / 8.7;
+
+    const radius =
+        BASE_R * Math.pow(1 - t, 0.76);
+
+    for (let branch = 0; branch < 14; branch++) {
+
+        const angle =
+            branch * TAU / 14 + level * 0.19;
+
+        for (let j = 0; j < 18; j++) {
+
+            const u = j / 17;
+
+            const r = radius * (0.12 + u * 0.92);
+
+            const a = angle + u * 0.22;
+
+            tree.push({
+
+                x: r * Math.cos(a),
+
+                y: -t * TREE_H + u * 13 + rand(-2, 2),
+
+                z: r * Math.sin(a),
+
+                size: rand(0.4, 1.5),
+
+                phase: rand(0, TAU),
+
+                speed: rand(0.7, 2.4),
+
+                color: Math.random() < 0.75
+                    ? "#ffffff"
+                    : "#dcb8fa",
+
+                sparkle: Math.random() > 0.94
+            });
+        }
+    }
 }
 
-/* =========================
-   星空
-========================= */
-function drawStars(){
- for(const s of stars){
-  const a=.18+.62*(.5+.5*Math.sin(time*1.3+s.phase));
-  dot(s.x*W,s.y*H,s.size,"#dbc9eb",a);
- }
+
+/* ===================================
+   5. 树身螺旋灯带
+=================================== */
+
+const bulbs = [];
+
+const BULB_COUNT = 200;
+
+function spiralPoint(t, offset = 0) {
+
+    const angle = t * TAU * 5.2 + offset;
+
+    const radius =
+        BASE_R * Math.pow(1 - t, 0.81) * 1.04;
+
+    return {
+
+        x: radius * Math.cos(angle),
+
+        y: -t * TREE_H,
+
+        z: radius * Math.sin(angle)
+    };
 }
 
-/* =========================
-   雪花
-========================= */
-function drawSnow(){
- for(const s of snow){
-  s.y+=s.speed;
-  s.x+=s.drift+Math.sin(time*1.2+s.phase)*.28;
 
-  if(s.y>H+6){
-   s.y=-6;
-   s.x=rand(0,W);
-  }
-  if(s.x<0)s.x=W;
-  if(s.x>W)s.x=0;
+for (let i = 0; i < BULB_COUNT; i++) {
 
-  const a=.22+.70*(.5+.5*Math.sin(time*1.8+s.phase));
-  dot(s.x,s.y,s.size,"#f7efff",a,s.size>1.5);
- }
+    const t = i / BULB_COUNT;
+
+    const p = spiralPoint(t);
+
+    bulbs.push({
+
+        ...p,
+
+        phase: rand(0, TAU),
+
+        size: rand(1.1, 2.8)
+    });
 }
 
-/* =========================
-   地面光环 + 粒子
-========================= */
-function drawRings(){
- const s=scale();
- const radii=[1.25,1.62,2.05,2.55,3.15,3.85,4.55];
 
- for(let j=0;j<radii.length;j++){
-  const r=BASE_R*radii[j];
-  const points=[];
+/* ===================================
+   6. 树体独立闪烁星点
+=================================== */
 
-  for(let i=0;i<=240;i++){
-   const a=i/240*TAU;
-   points.push(project({
-    x:r*Math.cos(a),y:0,
-    z:r*Math.sin(a)
-   }));
-  }
+const glitters = [];
 
-  ctx.beginPath();
-  points.forEach((p,i)=>{
-   if(i===0)ctx.moveTo(p.x,p.y);
-   else ctx.lineTo(p.x,p.y);
-  });
+for (let i = 0; i < 250; i++) {
 
-  ctx.strokeStyle=j%2===0?
-   "rgba(190,120,232,.34)":
-   "rgba(228,198,247,.18)";
-  ctx.lineWidth=1.05*s;
-  ctx.shadowColor="#c274ed";
-  ctx.shadowBlur=9;
-  ctx.stroke();
-  ctx.shadowBlur=0;
- }
+    const t = rand(0.04, 0.98);
 
- for(const g of ground){
-  const p=project(g);
-  const a=.18+.62*Math.pow(.5+.5*Math.sin(time*1.1+g.phase),2);
-  dot(p.x,p.y,g.size*p.k,
-      "#cfa4e9",a,g.size>1);
- }
+    const radius =
+        BASE_R *
+        Math.pow(1 - t, 0.76) *
+        rand(0.55, 1.1);
+
+    const angle = rand(0, TAU);
+
+    glitters.push({
+
+        x: radius * Math.cos(angle),
+
+        y: -t * TREE_H,
+
+        z: radius * Math.sin(angle),
+
+        phase: rand(0, TAU),
+
+        size: rand(0.8, 2.8)
+    });
 }
 
-/* =========================
-   树主体
-========================= */
-function drawTree(){
- const list=tree.map(p=>({p,q:project(p)}));
- list.sort((a,b)=>b.q.z-a.q.z);
 
- for(const item of list){
-  const p=item.p,q=item.q;
+/* ===================================
+   7. 背景星空
+=================================== */
 
-  const flicker=.23+.77*Math.pow(
-   .5+.5*Math.sin(time*p.speed+p.phase),2.7
-  );
+const stars = [];
 
-  const alpha=flicker*(.62+.38*q.k);
-  const r=p.size*q.k*scale()*.92;
+for (let i = 0; i < 420; i++) {
 
-  dot(q.x,q.y,r,p.color,alpha,r>1.1);
- }
+    stars.push({
+
+        x: rand(0, 1),
+
+        y: rand(0, 1),
+
+        size: rand(0.3, 1.4),
+
+        phase: rand(0, TAU),
+
+        alpha: rand(0.2, 0.8)
+    });
 }
 
-/* =========================
-   螺旋灯带
-========================= */
-function drawSpiral(){
- const points=spiral.map(project);
 
- ctx.beginPath();
- points.forEach((p,i)=>{
-  if(i===0)ctx.moveTo(p.x,p.y);
-  else ctx.lineTo(p.x,p.y);
- });
+/* ===================================
+   8. 飘落雪花
+   远景和近景分开
+=================================== */
 
- ctx.strokeStyle="rgba(223,175,248,.80)";
- ctx.lineWidth=1.35*scale();
- ctx.shadowColor="#e1a6ff";
- ctx.shadowBlur=14;
- ctx.stroke();
+const snowBack = [];
+const snowFront = [];
 
- ctx.strokeStyle="rgba(255,248,255,.58)";
- ctx.lineWidth=.56*scale();
- ctx.shadowBlur=5;
- ctx.stroke();
- ctx.shadowBlur=0;
+function createSnow(list, count, foreground) {
 
- for(const b of bulbs){
-  const p=project(b);
-  const f=.18+.82*(.5+.5*Math.sin(time*2.8+b.phase));
-  dot(p.x,p.y,b.size*p.k*scale(),
-      "#f8e3ff",f,true);
- }
+    for (let i = 0; i < count; i++) {
 
- for(const g of glitters){
-  const p=project(g);
-  const f=Math.pow(.5+.5*Math.sin(time*2.2+g.phase),4.8);
-  dot(p.x,p.y,g.size*p.k*scale(),
-      "#fffaff",f,true);
- }
+        list.push({
+
+            x: rand(0, W),
+
+            y: rand(0, H),
+
+            size: foreground
+                ? rand(1.1, 2.8)
+                : rand(0.35, 1.5),
+
+            speed: foreground
+                ? rand(65, 145)
+                : rand(30, 85),
+
+            drift: rand(-18, 18),
+
+            phase: rand(0, TAU),
+
+            alpha: rand(0.35, 0.95),
+
+            foreground
+        });
+    }
 }
 
-/* =========================
-   树周围环绕效果
-========================= */
-function orbitPoint(o, t){
- const a=t*TAU;
- let x=Math.cos(a)*o.rx;
- let z=Math.sin(a)*o.rz;
- let y=o.y+Math.sin(a*2+time*o.speed)*o.amp;
+createSnow(snowBack, 620, false);
+createSnow(snowFront, 280, true);
 
- // 模拟轻微倾斜
- const yy=y*Math.cos(o.tilt)-z*Math.sin(o.tilt);
- const zz=y*Math.sin(o.tilt)+z*Math.cos(o.tilt);
 
- return {x, y:yy, z:zz};
+/* ===================================
+   9. 地面银河粒子
+=================================== */
+
+const ground = [];
+
+for (let i = 0; i < 1700; i++) {
+
+    const a = rand(0, TAU);
+
+    const r = BASE_R * rand(1.0, 4.5);
+
+    ground.push({
+
+        x: r * Math.cos(a),
+
+        y: rand(-1.2, 1.2),
+
+        z: r * Math.sin(a),
+
+        size: rand(0.35, 1.5),
+
+        phase: rand(0, TAU)
+    });
 }
 
-function drawOrbiters(){
- for(const o of orbiters){
-  const pts=[];
 
-  for(let i=0;i<=140;i++){
-   const t=i/140;
-   pts.push(project(orbitPoint(o,t)));
-  }
+/* ===================================
+   10. 四组环绕轨道
+=================================== */
 
-  // faint path
-  ctx.beginPath();
-  pts.forEach((p,i)=>{
-   if(i===0)ctx.moveTo(p.x,p.y);
-   else ctx.lineTo(p.x,p.y);
-  });
-  ctx.strokeStyle="rgba(245,220,255,0.10)";
-  ctx.lineWidth=.9*scale();
-  ctx.shadowColor=o.glow;
-  ctx.shadowBlur=6;
-  ctx.stroke();
-  ctx.shadowBlur=0;
+const orbiters = [
 
-  // moving beads
-  for(let k=0;k<18;k++){
-   const tt=((time*o.speed*0.08)+k/18)%1;
-   const p=project(orbitPoint(o,tt<0?tt+1:tt));
-   const alpha=.18+.68*(1-k/22);
-   const rr=(1.4-k*0.04)*scale()*p.k;
-   dot(p.x,p.y,rr,o.color,alpha,true);
-  }
+    {
+        rx: BASE_R * 1.40,
+        rz: BASE_R * 1.18,
+        y: -TREE_H * 0.20,
+        tilt: 0.40,
+        wave: 10,
+        speed: 0.72,
+        color: "#e7b5ff",
+        glow: "#c77aff"
+    },
 
-  // leader comet
-  const lead=project(orbitPoint(o,((time*o.speed*0.10)%1+1)%1));
-  dot(lead.x,lead.y,2.7*scale()*lead.k,"#ffffff",.95,true);
- }
+    {
+        rx: BASE_R * 1.17,
+        rz: BASE_R * 1.42,
+        y: -TREE_H * 0.43,
+        tilt: -0.38,
+        wave: 12,
+        speed: -0.58,
+        color: "#ffffff",
+        glow: "#df9fff"
+    },
+
+    {
+        rx: BASE_R * 0.94,
+        rz: BASE_R * 1.15,
+        y: -TREE_H * 0.67,
+        tilt: 0.30,
+        wave: 8,
+        speed: 0.85,
+        color: "#d9a1ff",
+        glow: "#b86aff"
+    },
+
+    {
+        rx: BASE_R * 1.62,
+        rz: BASE_R * 1.30,
+        y: -TREE_H * 0.36,
+        tilt: -0.16,
+        wave: 15,
+        speed: -0.34,
+        color: "#e9caff",
+        glow: "#b77ae8"
+    }
+
+];
+
+
+/* ===================================
+   11. 三维透视投影
+=================================== */
+
+function project(p) {
+
+    const s = scale();
+
+    const x1 =
+        p.x * Math.cos(yaw)
+        - p.z * Math.sin(yaw);
+
+    const z1 =
+        p.x * Math.sin(yaw)
+        + p.z * Math.cos(yaw);
+
+    const y1 =
+        p.y * Math.cos(pitch)
+        - z1 * Math.sin(pitch);
+
+    const z2 =
+        p.y * Math.sin(pitch)
+        + z1 * Math.cos(pitch);
+
+    const focal = 1180;
+
+    const k = focal / (focal + z2);
+
+    return {
+
+        x: W / 2 + x1 * s * k,
+
+        y: baseY() + y1 * s * k,
+
+        z: z2,
+
+        k
+    };
 }
 
-/* =========================
-   顶部水晶装饰
-========================= */
-function drawTopStar(){
- const p=project({x:0,y:-TREE_H-24,z:0});
- const s=scale();
- const pulse=1+0.08*Math.sin(time*2.2);
 
- const h=17*s*pulse;
- const w=8*s*pulse;
+/* ===================================
+   12. 发光粒子绘制函数
+=================================== */
 
- ctx.save();
- ctx.translate(p.x,p.y);
+function dot(x, y, r, color, alpha, glow = false) {
 
- const glow=ctx.createRadialGradient(0,0,0,0,0,h*2.9);
- glow.addColorStop(0,"rgba(255,255,255,0.96)");
- glow.addColorStop(0.22,"rgba(247,232,255,0.58)");
- glow.addColorStop(0.50,"rgba(214,168,255,0.22)");
- glow.addColorStop(1,"rgba(180,120,255,0)");
- ctx.fillStyle=glow;
- ctx.beginPath();
- ctx.arc(0,0,h*2.9,0,TAU);
- ctx.fill();
+    ctx.globalAlpha = alpha;
 
- ctx.shadowColor="#ffffff";
- ctx.shadowBlur=20;
+    ctx.fillStyle = color;
 
- const crystal=ctx.createLinearGradient(-w,-h,w,h*1.25);
- crystal.addColorStop(0,"rgba(255,255,255,0.98)");
- crystal.addColorStop(0.35,"rgba(242,228,255,0.95)");
- crystal.addColorStop(0.7,"rgba(212,186,255,0.92)");
- crystal.addColorStop(1,"rgba(255,255,255,0.98)");
- ctx.fillStyle=crystal;
+    if (glow) {
 
- ctx.beginPath();
- ctx.moveTo(0,-h);
- ctx.lineTo(w,0);
- ctx.lineTo(0,h*1.25);
- ctx.lineTo(-w,0);
- ctx.closePath();
- ctx.fill();
+        ctx.shadowColor = color;
 
- ctx.shadowBlur=0;
- ctx.strokeStyle="rgba(255,255,255,0.76)";
- ctx.lineWidth=Math.max(0.8,1.1*s);
+        ctx.shadowBlur = 10;
+    }
 
- ctx.beginPath();
- ctx.moveTo(0,-h);
- ctx.lineTo(0,h*1.25);
- ctx.stroke();
+    ctx.beginPath();
 
- ctx.beginPath();
- ctx.moveTo(0,-h*0.05);
- ctx.lineTo(-w*0.82,0);
- ctx.lineTo(0,h*0.62);
- ctx.lineTo(w*0.82,0);
- ctx.closePath();
- ctx.stroke();
+    ctx.arc(x, y, Math.max(0.25, r), 0, TAU);
 
- ctx.fillStyle="#ffffff";
- ctx.beginPath();
- ctx.arc(0,-h,1.9*s,0,TAU);
- ctx.fill();
+    ctx.fill();
 
- ctx.beginPath();
- ctx.arc(0,h*1.25,1.6*s,0,TAU);
- ctx.fill();
+    ctx.shadowBlur = 0;
 
- function sparkle(x,y,r,alpha){
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.globalAlpha=alpha;
-  ctx.strokeStyle="#ffffff";
-  ctx.lineWidth=Math.max(0.8,1*s);
-  ctx.shadowColor="#ffffff";
-  ctx.shadowBlur=8;
-
-  ctx.beginPath();
-  ctx.moveTo(-r,0);
-  ctx.lineTo(r,0);
-  ctx.moveTo(0,-r);
-  ctx.lineTo(0,r);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(-r*.6,-r*.6);
-  ctx.lineTo(r*.6,r*.6);
-  ctx.moveTo(r*.6,-r*.6);
-  ctx.lineTo(-r*.6,r*.6);
-  ctx.stroke();
-  ctx.restore();
- }
-
- const tw=.55+.45*Math.sin(time*3.2);
- sparkle(-w*1.45,-h*.15,3.5*s,.34+.36*tw);
- sparkle(w*1.58,h*.05,2.9*s,.25+.28*tw);
- sparkle(0,-h*1.45,2.6*s,.20+.25*tw);
-
- ctx.restore();
+    ctx.globalAlpha = 1;
 }
 
-/* =========================
-   树底暖光
-========================= */
-function drawBaseGlow(){
- const x=W/2;
- const y=H*.71;
- const s=scale();
 
- const g=ctx.createRadialGradient(x,y,0,x,y,58*s);
- g.addColorStop(0,"rgba(255,214,168,.75)");
- g.addColorStop(.18,"rgba(229,158,222,.38)");
- g.addColorStop(.50,"rgba(170,100,216,.12)");
- g.addColorStop(1,"rgba(0,0,0,0)");
+/* ===================================
+   13. 梦幻紫色背景光晕
+=================================== */
 
- ctx.fillStyle=g;
- ctx.beginPath();
- ctx.arc(x,y,58*s,0,TAU);
- ctx.fill();
+function drawNebula() {
+
+    ctx.save();
+
+    ctx.globalCompositeOperation = "screen";
+
+    function glow(x, y, radius, color) {
+
+        const g = ctx.createRadialGradient(
+            x, y, 0,
+            x, y, radius
+        );
+
+        g.addColorStop(0, color);
+
+        g.addColorStop(1, "rgba(0,0,0,0)");
+
+        ctx.fillStyle = g;
+
+        ctx.beginPath();
+
+        ctx.arc(x, y, radius, 0, TAU);
+
+        ctx.fill();
+    }
+
+    glow(
+        W * 0.50,
+        H * 0.46,
+        Math.min(W, H) * 0.46,
+        "rgba(115,43,173,0.19)"
+    );
+
+    glow(
+        W * 0.27,
+        H * 0.55,
+        Math.min(W, H) * 0.30,
+        "rgba(105,46,160,0.10)"
+    );
+
+    glow(
+        W * 0.73,
+        H * 0.48,
+        Math.min(W, H) * 0.34,
+        "rgba(155,76,205,0.10)"
+    );
+
+    glow(
+        W * 0.50,
+        H * 0.80,
+        Math.min(W, H) * 0.30,
+        "rgba(130,70,170,0.12)"
+    );
+
+    ctx.restore();
 }
 
-/* =========================
-   主动画
-========================= */
-function animate(){
- requestAnimationFrame(animate);
- time+=.016;
 
- if(!dragging)targetYaw+=.00085;
+/* ===================================
+   14. 星空闪烁
+=================================== */
 
- yaw+=(targetYaw-yaw)*.08;
- pitch+=(targetPitch-pitch)*.08;
+function drawStars() {
 
- pitch=clamp(pitch,.10,1.05);
+    for (const s of stars) {
 
- ctx.clearRect(0,0,W,H);
- ctx.fillStyle="#020104";
- ctx.fillRect(0,0,W,H);
+        const a =
+            s.alpha *
+            (0.25 + 0.75 *
+            (0.5 + 0.5 * Math.sin(time * 1.4 + s.phase)));
 
- drawStars();
- drawSnow();
- drawRings();
- drawBaseGlow();
- drawOrbiters();   // 新增：树周围环绕效果
- drawTree();
- drawSpiral();
- drawTopStar();
+        dot(
+            s.x * W,
+            s.y * H,
+            s.size,
+            "#e9d8ff",
+            a
+        );
+    }
 }
 
-animate();
 
-/* =========================
-   鼠标拖动旋转
-========================= */
-canvas.addEventListener("pointerdown",e=>{
- dragging=true;
- lastX=e.clientX;
- lastY=e.clientY;
- canvas.setPointerCapture(e.pointerId);
+/* ===================================
+   15. 雪花下落
+=================================== */
+
+function drawSnow(list, dt) {
+
+    for (const s of list) {
+
+        s.y += s.speed * dt;
+
+        s.x += (
+            s.drift +
+            Math.sin(time * 1.2 + s.phase) * 12
+        ) * dt;
+
+        if (s.y > H + 8) {
+
+            s.y = -8;
+
+            s.x = rand(0, W);
+        }
+
+        if (s.x > W + 5) s.x = -5;
+
+        if (s.x < -5) s.x = W + 5;
+
+        const flicker =
+            0.65 +
+            0.35 * Math.sin(time * 1.7 + s.phase);
+
+        ctx.globalAlpha = s.alpha * flicker;
+
+        ctx.fillStyle = "#f8efff";
+
+        if (s.foreground && s.size > 2) {
+
+            ctx.shadowColor = "#e3c6ff";
+
+            ctx.shadowBlur = 12;
+        }
+
+        ctx.beginPath();
+
+        ctx.arc(
+            s.x,
+            s.y,
+            s.size,
+            0,
+            TAU
+        );
+
+        ctx.fill();
+
+        ctx.shadowBlur = 0;
+    }
+
+    ctx.globalAlpha = 1;
+}
+
+
+/* ===================================
+   16. 地面银河光环
+=================================== */
+
+function drawRings() {
+
+    const s = scale();
+
+    const radii = [
+        1.25, 1.62, 2.05,
+        2.55, 3.15, 3.85, 4.55
+    ];
+
+    for (let j = 0; j < radii.length; j++) {
+
+        const r = BASE_R * radii[j];
+
+        ctx.beginPath();
+
+        for (let i = 0; i <= 240; i++) {
+
+            const a = i / 240 * TAU;
+
+            const p = project({
+
+                x: r * Math.cos(a),
+
+                y: 0,
+
+                z: r * Math.sin(a)
+            });
+
+            if (i === 0) {
+
+                ctx.moveTo(p.x, p.y);
+
+            } else {
+
+                ctx.lineTo(p.x, p.y);
+            }
+        }
+
+        ctx.strokeStyle = j % 2 === 0
+            ? "rgba(190,120,232,0.35)"
+            : "rgba(228,198,247,0.18)";
+
+        ctx.lineWidth = 1.1 * s;
+
+        ctx.shadowColor = "#c274ed";
+
+        ctx.shadowBlur = 10;
+
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+    }
+
+    for (const g of ground) {
+
+        const p = project(g);
+
+        const a =
+            0.18 +
+            0.62 * Math.pow(
+                0.5 + 0.5 * Math.sin(time * 1.1 + g.phase),
+                2
+            );
+
+        dot(
+            p.x,
+            p.y,
+            g.size * p.k,
+            "#d0a4f0",
+            a,
+            g.size > 1
+        );
+    }
+}
+
+
+/* ===================================
+   17. 树底紫色光晕
+=================================== */
+
+function drawBaseGlow() {
+
+    const x = W / 2;
+
+    const y = baseY();
+
+    const s = scale();
+
+    const g = ctx.createRadialGradient(
+        x, y, 0,
+        x, y, 75 * s
+    );
+
+    g.addColorStop(
+        0,
+        "rgba(255,215,255,0.65)"
+    );
+
+    g.addColorStop(
+        0.18,
+        "rgba(201,119,255,0.38)"
+    );
+
+    g.addColorStop(
+        0.50,
+        "rgba(130,60,190,0.15)"
+    );
+
+    g.addColorStop(
+        1,
+        "rgba(0,0,0,0)"
+    );
+
+    ctx.fillStyle = g;
+
+    ctx.beginPath();
+
+    ctx.arc(x, y, 75 * s, 0, TAU);
+
+    ctx.fill();
+}
+
+
+/* ===================================
+   18. 圣诞树粒子主体
+=================================== */
+
+function drawTree() {
+
+    const list = tree.map(p => ({
+        p,
+        q: project(p)
+    }));
+
+    // 按照远近进行排序
+    list.sort((a, b) => b.q.z - a.q.z);
+
+    for (const item of list) {
+
+        const p = item.p;
+
+        const q = item.q;
+
+        const flicker =
+            0.25 +
+            0.75 * Math.pow(
+                0.5 +
+                0.5 * Math.sin(time * p.speed + p.phase),
+                2.6
+            );
+
+        const alpha =
+            flicker * (0.62 + 0.38 * q.k);
+
+        const r =
+            p.size * q.k * scale() * 0.92;
+
+        dot(
+            q.x,
+            q.y,
+            r,
+            p.color,
+            alpha,
+            p.sparkle && flicker > 0.75
+        );
+    }
+}
+
+
+/* ===================================
+   19. 树身双层螺旋灯带
+=================================== */
+
+function drawSpiralStrand(offset, color, width, blur) {
+
+    ctx.beginPath();
+
+    const segments = 850;
+
+    for (let i = 0; i <= segments; i++) {
+
+        const t = i / segments;
+
+        const p = spiralPoint(t, offset);
+
+        const q = project(p);
+
+        if (i === 0) {
+
+            ctx.moveTo(q.x, q.y);
+
+        } else {
+
+            ctx.lineTo(q.x, q.y);
+        }
+    }
+
+    ctx.strokeStyle = color;
+
+    ctx.lineWidth = width * scale();
+
+    ctx.shadowColor = color;
+
+    ctx.shadowBlur = blur;
+
+    ctx.stroke();
+
+    ctx.shadowBlur = 0;
+}
+
+
+function drawSpiral() {
+
+    drawSpiralStrand(
+        0,
+        "rgba(207,155,255,0.85)",
+        1.5,
+        15
+    );
+
+    drawSpiralStrand(
+        Math.PI,
+        "rgba(255,238,255,0.40)",
+        0.75,
+        7
+    );
+
+    // 螺旋灯珠
+    for (const b of bulbs) {
+
+        const p = project(b);
+
+        const f =
+            0.15 +
+            0.85 * (
+                0.5 +
+                0.5 * Math.sin(time * 2.8 + b.phase)
+            );
+
+        dot(
+            p.x,
+            p.y,
+            b.size * p.k * scale(),
+            "#f8e3ff",
+            f,
+            true
+        );
+    }
+
+    // 独立闪烁的星光
+    for (const g of glitters) {
+
+        const p = project(g);
+
+        const f = Math.pow(
+            0.5 +
+            0.5 * Math.sin(time * 2.2 + g.phase),
+            4.8
+        );
+
+        dot(
+            p.x,
+            p.y,
+            g.size * p.k * scale(),
+            "#fffaff",
+            f,
+            true
+        );
+    }
+}
+
+
+/* ===================================
+   20. 环绕轨道三维坐标
+=================================== */
+
+function orbitPoint(o, t) {
+
+    const a = t * TAU;
+
+    const x = Math.cos(a) * o.rx;
+
+    const z = Math.sin(a) * o.rz;
+
+    const localY =
+        Math.sin(a * 2 + time * 0.55) * o.wave;
+
+    // 轨道倾斜
+    const y =
+        o.y +
+        localY * Math.cos(o.tilt)
+        - z * Math.sin(o.tilt);
+
+    const zz =
+        localY * Math.sin(o.tilt)
+        + z * Math.cos(o.tilt);
+
+    return {
+        x,
+        y,
+        z: zz
+    };
+}
+
+
+/* ===================================
+   21. 环绕轨迹
+=================================== */
+
+function drawOrbitTrails() {
+
+    for (const o of orbiters) {
+
+        const points = [];
+
+        for (let i = 0; i <= 240; i++) {
+
+            const t = i / 240;
+
+            points.push(
+                project(orbitPoint(o, t))
+            );
+        }
+
+        // 柔和的基础光轨
+        ctx.beginPath();
+
+        points.forEach((p, i) => {
+
+            if (i === 0) {
+
+                ctx.moveTo(p.x, p.y);
+
+            } else {
+
+                ctx.lineTo(p.x, p.y);
+            }
+        });
+
+        ctx.strokeStyle = "rgba(216,169,255,0.20)";
+
+        ctx.lineWidth = 1.25 * scale();
+
+        ctx.shadowColor = o.glow;
+
+        ctx.shadowBlur = 12;
+
+        ctx.stroke();
+
+        // 流动的虚线轨迹
+        ctx.save();
+
+        ctx.beginPath();
+
+        points.forEach((p, i) => {
+
+            if (i === 0) {
+
+                ctx.moveTo(p.x, p.y);
+
+            } else {
+
+                ctx.lineTo(p.x, p.y);
+            }
+        });
+
+        ctx.setLineDash([
+            7 * scale(),
+            14 * scale()
+        ]);
+
+        ctx.lineDashOffset =
+            -time * 30 * o.speed;
+
+        ctx.strokeStyle = o.color;
+
+        ctx.globalAlpha = 0.40;
+
+        ctx.lineWidth = 1.1 * scale();
+
+        ctx.shadowColor = o.glow;
+
+        ctx.shadowBlur = 9;
+
+        ctx.stroke();
+
+        ctx.restore();
+
+        ctx.setLineDash([]);
+
+        ctx.globalAlpha = 1;
+
+        ctx.shadowBlur = 0;
+    }
+}
+
+
+/* ===================================
+   22. 环绕运动粒子与彗星
+=================================== */
+
+function drawOrbitParticles() {
+
+    for (const o of orbiters) {
+
+        // 运动光珠
+        for (let k = 0; k < 30; k++) {
+
+            const t = (
+                k / 30 +
+                time * o.speed * 0.045
+            ) % 1;
+
+            const p = project(orbitPoint(o, t));
+
+            const f =
+                0.35 +
+                0.65 * (
+                    0.5 +
+                    0.5 * Math.sin(time * 2 + k)
+                );
+
+            const r =
+                (1.0 + f * 1.5) *
+                scale() *
+                p.k;
+
+            dot(
+                p.x,
+                p.y,
+                r,
+                o.color,
+                0.35 + f * 0.55,
+                true
+            );
+        }
+
+        // 彗星光点
+        const headT = (
+            time * o.speed * 0.045
+        ) % 1;
+
+        const head = project(
+            orbitPoint(o, headT)
+        );
+
+        dot(
+            head.x,
+            head.y,
+            3.5 * scale() * head.k,
+            "#ffffff",
+            1,
+            true
+        );
+
+        dot(
+            head.x,
+            head.y,
+            7 * scale() * head.k,
+            o.color,
+            0.35,
+            true
+        );
+    }
+}
+
+
+/* ===================================
+   23. 树顶八角水晶星星
+=================================== */
+
+function drawTopStar() {
+
+    const p = project({
+        x: 0,
+        y: -TREE_H - 23,
+        z: 0
+    });
+
+    const s = scale();
+
+    const pulse =
+        1 + 0.09 * Math.sin(time * 2.2);
+
+    const h = 18 * s * pulse;
+
+    const w = 16 * s * pulse;
+
+    ctx.save();
+
+    ctx.translate(p.x, p.y);
+
+    // 紫白色外层光晕
+    const glow = ctx.createRadialGradient(
+        0, 0, 0,
+        0, 0, h * 3.3
+    );
+
+    glow.addColorStop(
+        0,
+        "rgba(255,255,255,0.95)"
+    );
+
+    glow.addColorStop(
+        0.20,
+        "rgba(239,213,255,0.62)"
+    );
+
+    glow.addColorStop(
+        0.48,
+        "rgba(189,117,255,0.26)"
+    );
+
+    glow.addColorStop(
+        1,
+        "rgba(160,90,255,0)"
+    );
+
+    ctx.fillStyle = glow;
+
+    ctx.beginPath();
+
+    ctx.arc(0, 0, h * 3.3, 0, TAU);
+
+    ctx.fill();
+
+    // 八角水晶星星主体
+    const starGradient = ctx.createLinearGradient(
+        -w, -h,
+        w, h
+    );
+
+    starGradient.addColorStop(
+        0,
+        "#ffffff"
+    );
+
+    starGradient.addColorStop(
+        0.35,
+        "#f1dcff"
+    );
+
+    starGradient.addColorStop(
+        0.70,
+        "#c99af1"
+    );
+
+    starGradient.addColorStop(
+        1,
+        "#ffffff"
+    );
+
+    ctx.shadowColor = "#d8a4ff";
+
+    ctx.shadowBlur = 23;
+
+    ctx.fillStyle = starGradient;
+
+    ctx.beginPath();
+
+    for (let i = 0; i < 8; i++) {
+
+        const angle = -Math.PI / 2 + i * Math.PI / 4;
+
+        const r = i % 2 === 0 ? h : h * 0.38;
+
+        const x = Math.cos(angle) * r * 0.88;
+
+        const y = Math.sin(angle) * r;
+
+        if (i === 0) {
+
+            ctx.moveTo(x, y);
+
+        } else {
+
+            ctx.lineTo(x, y);
+        }
+    }
+
+    ctx.closePath();
+
+    ctx.fill();
+
+    // 水晶内部切面
+    ctx.shadowBlur = 0;
+
+    ctx.strokeStyle = "rgba(255,255,255,0.82)";
+
+    ctx.lineWidth = Math.max(0.8, 1.1 * s);
+
+    ctx.beginPath();
+
+    ctx.moveTo(0, -h);
+
+    ctx.lineTo(0, h);
+
+    ctx.moveTo(-w * 0.52, -h * 0.25);
+
+    ctx.lineTo(0, 0);
+
+    ctx.lineTo(w * 0.52, -h * 0.25);
+
+    ctx.moveTo(-w * 0.52, h * 0.25);
+
+    ctx.lineTo(0, 0);
+
+    ctx.lineTo(w * 0.52, h * 0.25);
+
+    ctx.stroke();
+
+    // 中央高亮
+    ctx.fillStyle = "#ffffff";
+
+    ctx.shadowColor = "#ffffff";
+
+    ctx.shadowBlur = 12;
+
+    ctx.beginPath();
+
+    ctx.arc(0, 0, 2.5 * s, 0, TAU);
+
+    ctx.fill();
+
+    // 四周小闪光
+    const tw =
+        0.55 + 0.45 * Math.sin(time * 3.2);
+
+    function sparkle(x, y, r, alpha) {
+
+        ctx.save();
+
+        ctx.translate(x, y);
+
+        ctx.globalAlpha = alpha;
+
+        ctx.strokeStyle = "#ffffff";
+
+        ctx.lineWidth = Math.max(0.8, 1 * s);
+
+        ctx.shadowColor = "#ffffff";
+
+        ctx.shadowBlur = 10;
+
+        ctx.beginPath();
+
+        ctx.moveTo(-r, 0);
+
+        ctx.lineTo(r, 0);
+
+        ctx.moveTo(0, -r);
+
+        ctx.lineTo(0, r);
+
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    sparkle(
+        -w * 1.3,
+        -h * 0.3,
+        4 * s,
+        0.35 + tw * 0.4
+    );
+
+    sparkle(
+        w * 1.3,
+        h * 0.25,
+        3 * s,
+        0.25 + tw * 0.35
+    );
+
+    sparkle(
+        0,
+        -h * 1.5,
+        3 * s,
+        0.30 + tw * 0.3
+    );
+
+    ctx.restore();
+}
+
+
+/* ===================================
+   24. 主动画
+=================================== */
+
+function animate(timestamp) {
+
+    requestAnimationFrame(animate);
+
+    const dt = lastFrame
+        ? Math.min((timestamp - lastFrame) / 1000, 0.04)
+        : 0.016;
+
+    lastFrame = timestamp;
+
+    time += dt;
+
+    // 自动缓慢旋转
+    if (!dragging) {
+
+        targetYaw += 0.00085 * (dt * 60);
+    }
+
+    yaw += (targetYaw - yaw) * 0.08;
+
+    pitch += (targetPitch - pitch) * 0.08;
+
+    pitch = clamp(pitch, 0.08, 1.05);
+
+    // 清空画布
+    ctx.clearRect(0, 0, W, H);
+
+    ctx.fillStyle = "#03010a";
+
+    ctx.fillRect(0, 0, W, H);
+
+    // 背景
+    drawNebula();
+
+    drawStars();
+
+    // 远景雪花
+    drawSnow(snowBack, dt);
+
+    // 地面银河
+    drawRings();
+
+    // 树底光晕
+    drawBaseGlow();
+
+    // 环绕光轨（后层）
+    drawOrbitTrails();
+
+    // 树体
+    drawTree();
+
+    // 树身灯带
+    drawSpiral();
+
+    // 环绕粒子（前层）
+    drawOrbitParticles();
+
+    // 树顶水晶星星
+    drawTopStar();
+
+    // 近景雪花
+    drawSnow(snowFront, dt);
+}
+
+requestAnimationFrame(animate);
+
+
+/* ===================================
+   25. 鼠标拖动：3D旋转
+=================================== */
+
+canvas.addEventListener("pointerdown", e => {
+
+    dragging = true;
+
+    lastX = e.clientX;
+
+    lastY = e.clientY;
+
+    canvas.setPointerCapture(e.pointerId);
 });
 
-canvas.addEventListener("pointermove",e=>{
- if(!dragging)return;
 
- targetYaw+=(e.clientX-lastX)*.007;
- targetPitch+=(e.clientY-lastY)*.004;
+canvas.addEventListener("pointermove", e => {
 
- lastX=e.clientX;
- lastY=e.clientY;
+    if (!dragging) return;
+
+    const dx = e.clientX - lastX;
+
+    const dy = e.clientY - lastY;
+
+    targetYaw += dx * 0.007;
+
+    targetPitch += dy * 0.004;
+
+    targetPitch = clamp(
+        targetPitch,
+        0.08,
+        1.05
+    );
+
+    lastX = e.clientX;
+
+    lastY = e.clientY;
 });
 
-function stopDrag(){dragging=false;}
-canvas.addEventListener("pointerup",stopDrag);
-canvas.addEventListener("pointercancel",stopDrag);
 
-/* 滚轮微调观察角度 */
-canvas.addEventListener("wheel",e=>{
- targetPitch=clamp(
-  targetPitch+e.deltaY*.0004,
-  .10,
-  1.05
- );
-},{passive:true});
+function stopDrag() {
+
+    dragging = false;
+}
+
+canvas.addEventListener("pointerup", stopDrag);
+
+canvas.addEventListener("pointercancel", stopDrag);
+
+
+/* ===================================
+   26. 滚轮调整观察角度
+=================================== */
+
+canvas.addEventListener("wheel", e => {
+
+    targetPitch = clamp(
+        targetPitch + e.deltaY * 0.0004,
+        0.08,
+        1.05
+    );
+
+}, { passive: true });
+
 </script>
+
 </body>
 </html>
