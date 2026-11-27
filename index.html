@@ -5,1179 +5,1445 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title></title>
+
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{
- width:100%;
- height:100%;
- overflow:hidden;
- background:#03010a;
-}
-canvas{
- position:fixed;
- inset:0;
- width:100%;
- height:100%;
- cursor:grab;
- touch-action:none;
-}
-canvas:active{cursor:grabbing}
-
-/* 第一行：for YJL */
-#signature{
- position:fixed;
- left:50%;
- bottom:9%;
- transform:translateX(-50%);
- z-index:5;
- color:#f5eaff;
- font:italic clamp(26px,4vw,43px) Georgia,serif;
- letter-spacing:.15em;
- white-space:nowrap;
- text-shadow:
-  0 0 8px #fff,
-  0 0 20px #d8a4ff,
-  0 0 40px #9b54d8;
- pointer-events:none;
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
-/* 第二行：Merry Christmas */
-#message{
- position:fixed;
- left:50%;
- bottom:3%;
- transform:translateX(-50%);
- z-index:5;
- color:#f0d9ff;
- font:italic clamp(19px,2.7vw,31px)
- "Brush Script MT","Segoe Script",cursive;
- white-space:nowrap;
- text-shadow:
-  0 0 5px #fff,
-  0 0 13px #d58bfa,
-  0 0 30px #a34acb;
- pointer-events:none;
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+        radial-gradient(ellipse at 50% 45%, #160827 0%, #080312 48%, #020106 100%);
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+#signature, #message {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    white-space: nowrap;
+    pointer-events: none;
+    text-align: center;
+}
+
+#signature {
+    bottom: 9%;
+    color: #f8edff;
+    font: italic clamp(27px, 4vw, 44px) Georgia, serif;
+    letter-spacing: .15em;
+    text-shadow:
+        0 0 8px #ffffff,
+        0 0 22px #d9a8ff,
+        0 0 45px #a34ce8;
+}
+
+#message {
+    bottom: 3%;
+    color: #e9cfff;
+    font: italic clamp(19px, 2.7vw, 31px)
+        "Brush Script MT", "Segoe Script", cursive;
+    text-shadow:
+        0 0 6px #ffffff,
+        0 0 16px #d58bfa,
+        0 0 32px #a34acb;
 }
 </style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+  }
+}
+</script>
 </head>
+
 <body>
 
-<canvas id="scene"></canvas>
 <div id="signature">for YJL</div>
 <div id="message">Merry Christmas</div>
 
-<script>
-/* =================================
-   1. 基础参数
-================================= */
+<script type="module">
 
-const canvas=document.getElementById("scene");
-const ctx=canvas.getContext("2d");
+import * as THREE from "three";
 
-let W,H,DPR;
+import { OrbitControls }
+from "three/addons/controls/OrbitControls.js";
 
-let yaw=-0.25;
-let pitch=0.27;
-let targetYaw=yaw;
-let targetPitch=pitch;
+import { EffectComposer }
+from "three/addons/postprocessing/EffectComposer.js";
 
-let zoom=1;
-let dragging=false;
-let lastX=0,lastY=0;
+import { RenderPass }
+from "three/addons/postprocessing/RenderPass.js";
 
-let time=0;
-let lastFrame=0;
-
-const TREE_H=300;
-const BASE_R=128;
-const TAU=Math.PI*2;
-
-const rand=(a,b)=>a+Math.random()*(b-a);
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-
-function resize(){
- DPR=Math.min(window.devicePixelRatio||1,2);
- W=innerWidth;
- H=innerHeight;
-
- canvas.width=W*DPR;
- canvas.height=H*DPR;
+import { UnrealBloomPass }
+from "three/addons/postprocessing/UnrealBloomPass.js";
 
- ctx.setTransform(DPR,0,0,DPR,0,0);
-}
+import { OutputPass }
+from "three/addons/postprocessing/OutputPass.js";
 
-addEventListener("resize",resize);
-resize();
 
-function scale(){
- return Math.min(W/560,H/700,1.35)*.98*zoom;
-}
+/* =========================================
+   1. 基础场景
+========================================= */
 
-function baseY(){
- return H*.70;
-}
+const scene = new THREE.Scene();
 
+scene.background = new THREE.Color(0x03010a);
 
-/* =================================
-   2. 圣诞树粒子
-   分为外轮廓、内部填充、树枝
-================================= */
-
-const tree=[];
-
-const treeColors=[
- "#ffffff",
- "#f8efff",
- "#ead5ff",
- "#d5aaff",
- "#bd82ed",
- "#a969d9"
-];
+scene.fog = new THREE.FogExp2(0x03010a, 0.012);
 
-// 外层轮廓粒子
-for(let i=0;i<3800;i++){
+const renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance"
+});
 
- const t=Math.random();
- const angle=rand(0,TAU);
-
- const maxR=BASE_R*Math.pow(1-t,.76);
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 1.8)
+);
 
- let radial;
+renderer.setSize(window.innerWidth, window.innerHeight);
 
- if(Math.random()<.58){
-  radial=.78+Math.random()*.25;
- }else{
-  radial=Math.sqrt(Math.random())*.78;
- }
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
- // 树枝轮廓起伏
- const branchWave=
-  .93+
-  .07*Math.sin(angle*9+t*42)+
-  .025*Math.cos(angle*15-t*63);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
- const r=maxR*radial*branchWave;
+renderer.toneMappingExposure = 1.25;
 
- const colorIndex=Math.floor(rand(0,treeColors.length));
+document.body.appendChild(renderer.domElement);
 
- tree.push({
-  x:r*Math.cos(angle),
-  y:-t*TREE_H+rand(-3,3),
-  z:r*Math.sin(angle),
-  size:rand(.4,1.55),
-  phase:rand(0,TAU),
-  speed:rand(.7,2.6),
-  color:treeColors[colorIndex],
-  sparkle:Math.random()>.93
- });
-}
 
-// 内部填充粒子
-for(let i=0;i<1800;i++){
+const camera = new THREE.PerspectiveCamera(
+    42,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    100
+);
 
- const t=Math.random();
- const angle=rand(0,TAU);
+camera.position.set(0, 3.2, 10.5);
 
- const maxR=BASE_R*Math.pow(1-t,.76);
- const r=maxR*Math.sqrt(Math.random())*.76;
 
- tree.push({
-  x:r*Math.cos(angle),
-  y:-t*TREE_H+rand(-3,3),
-  z:r*Math.sin(angle),
-  size:rand(.35,1.15),
-  phase:rand(0,TAU),
-  speed:rand(.8,2.3),
-  color:Math.random()<.75?"#fffaff":"#d8a9f2",
-  sparkle:Math.random()>.96
- });
-}
+/* =========================================
+   2. 鼠标3D环绕控制
+========================================= */
 
-// 分层枝条
-for(let level=0;level<8;level++){
+const controls = new OrbitControls(
+    camera,
+    renderer.domElement
+);
 
- const t=.10+level*.105;
- const radius=BASE_R*Math.pow(1-t,.76);
+controls.target.set(0, 2.5, 0);
 
- for(let branch=0;branch<12;branch++){
+controls.enableDamping = true;
+controls.dampingFactor = 0.055;
 
-  const angle=branch*TAU/12+level*.24;
+controls.enablePan = false;
 
-  for(let j=0;j<16;j++){
+controls.enableZoom = true;
 
-   const u=j/15;
+controls.minDistance = 7;
+controls.maxDistance = 16;
 
-   const r=radius*(.12+u*1.03);
-   const a=angle+u*.20;
+controls.minPolarAngle = 0.15;
+controls.maxPolarAngle = Math.PI * 0.87;
 
-   tree.push({
-    x:r*Math.cos(a),
-    y:-t*TREE_H+u*13+Math.sin(u*Math.PI)*2,
-    z:r*Math.sin(a),
-    size:rand(.4,1.5),
-    phase:rand(0,TAU),
-    speed:rand(.7,2.4),
-    color:Math.random()<.78?"#ffffff":"#dcb8fa",
-    sparkle:Math.random()>.94
-   });
-  }
- }
-}
+controls.rotateSpeed = 0.65;
 
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.35;
 
-/* =================================
-   3. 树身双层螺旋灯带
-================================= */
 
-function spiralPoint(t,offset=0){
+/* =========================================
+   3. 灯光系统
+========================================= */
 
- const angle=t*TAU*4.8+offset;
- const radius=BASE_R*Math.pow(1-t,.81)*1.04;
+scene.add(
+    new THREE.AmbientLight(0xc9a8ff, 0.8)
+);
 
- return {
-  x:radius*Math.cos(angle),
-  y:-t*TREE_H,
-  z:radius*Math.sin(angle)
- };
-}
+const hemi = new THREE.HemisphereLight(
+    0xe9dcff,
+    0x170820,
+    1.1
+);
 
-const bulbs=[];
+scene.add(hemi);
 
-for(let strand=0;strand<2;strand++){
+const light1 = new THREE.PointLight(
+    0xd49aff, 32, 13
+);
 
- for(let i=0;i<105;i++){
+light1.position.set(0, 4.2, 2.5);
+scene.add(light1);
 
-  const t=i/105;
+const light2 = new THREE.PointLight(
+    0xffffff, 18, 11
+);
 
-  bulbs.push({
-   t,
-   offset:strand*Math.PI,
-   phase:rand(0,TAU),
-   size:rand(1,2.7)
-  });
- }
-}
+light2.position.set(-4, 5, 3);
+scene.add(light2);
 
+const light3 = new THREE.PointLight(
+    0x9d50ed, 25, 12
+);
 
-/* =================================
-   4. 树体独立闪烁星点
-================================= */
+light3.position.set(4, 2.5, -3);
+scene.add(light3);
 
-const glitters=[];
 
-for(let i=0;i<250;i++){
+/* =========================================
+   4. 辅助参数
+========================================= */
 
- const t=rand(.04,.98);
- const r=BASE_R*Math.pow(1-t,.76)*rand(.55,1.1);
- const a=rand(0,TAU);
+const H = 5.4;
+const R = 2.25;
 
- glitters.push({
-  x:r*Math.cos(a),
-  y:-t*TREE_H,
-  z:r*Math.sin(a),
-  phase:rand(0,TAU),
-  size:rand(.8,2.8)
- });
-}
+const TAU = Math.PI * 2;
 
+const rand = (a, b) => a + Math.random() * (b - a);
 
-/* =================================
-   5. 背景星空
-================================= */
+const treeGroup = new THREE.Group();
 
-const stars=[];
+scene.add(treeGroup);
 
-for(let i=0;i<420;i++){
-
- stars.push({
-  x:rand(0,1),
-  y:rand(0,1),
-  size:rand(.3,1.3),
-  phase:rand(0,TAU),
-  alpha:rand(.2,.8)
- });
-}
-
-
-/* =================================
-   6. 雪花
-   总计300片
-================================= */
-
-const snowBack=[];
-const snowFront=[];
-
-function createSnow(list,count,foreground){
-
- for(let i=0;i<count;i++){
-
-  list.push({
-   x:rand(0,W),
-   y:rand(0,H),
-
-   size:foreground
-    ?rand(1.1,2.2)
-    :rand(.35,1.15),
-
-   speed:foreground
-    ?rand(65,105)
-    :rand(25,55),
-
-   drift:rand(-16,16),
-   phase:rand(0,TAU),
-   alpha:foreground
-    ?rand(.35,.68)
-    :rand(.18,.48),
-
-   foreground
-  });
- }
-}
-
-createSnow(snowBack,210,false);
-createSnow(snowFront,90,true);
-
-
-/* =================================
-   7. 地面银河粒子
-================================= */
-
-const ground=[];
-
-for(let i=0;i<1400;i++){
-
- const a=rand(0,TAU);
- const r=BASE_R*rand(1,4.5);
-
- ground.push({
-  x:r*Math.cos(a),
-  y:rand(-1.2,1.2),
-  z:r*Math.sin(a),
-  size:rand(.35,1.4),
-  phase:rand(0,TAU)
- });
-}
-
-
-/* =================================
-   8. 四组不同空间轨道
-================================= */
-
-const orbiters=[
-
- {
-  rx:BASE_R*1.38,
-  rz:BASE_R*1.12,
-  y:-TREE_H*.20,
-  tilt:.46,
-  wave:10,
-  phase:0,
-  speed:.70,
-  color:"#edc9ff",
-  glow:"#c77aff"
- },
+const clock = new THREE.Clock();
 
- {
-  rx:BASE_R*1.15,
-  rz:BASE_R*1.48,
-  y:-TREE_H*.43,
-  tilt:-.37,
-  wave:13,
-  phase:1.5,
-  speed:-.55,
-  color:"#ffffff",
-  glow:"#df9fff"
- },
+let elapsed = 0;
 
- {
-  rx:BASE_R*.94,
-  rz:BASE_R*1.17,
-  y:-TREE_H*.69,
-  tilt:.31,
-  wave:9,
-  phase:2.4,
-  speed:.82,
-  color:"#d9a1ff",
-  glow:"#b86aff"
- },
 
- {
-  rx:BASE_R*1.62,
-  rz:BASE_R*1.30,
-  y:-TREE_H*.35,
-  tilt:-.18,
-  wave:15,
-  phase:3.1,
-  speed:-.36,
-  color:"#e9caff",
-  glow:"#b77ae8"
- }
+/* =========================================
+   5. 创建柔和星云纹理
+========================================= */
 
-];
+function createGlowTexture() {
 
+    const canvas = document.createElement("canvas");
 
-/* =================================
-   9. 三维透视投影
-================================= */
+    canvas.width = 256;
+    canvas.height = 256;
 
-function project(p){
+    const c = canvas.getContext("2d");
 
- const s=scale();
-
- const x1=p.x*Math.cos(yaw)-p.z*Math.sin(yaw);
- const z1=p.x*Math.sin(yaw)+p.z*Math.cos(yaw);
-
- const y1=p.y*Math.cos(pitch)-z1*Math.sin(pitch);
- const z2=p.y*Math.sin(pitch)+z1*Math.cos(pitch);
-
- const focal=1180;
- const k=focal/(focal+z2);
-
- return {
-  x:W/2+x1*s*k,
-  y:baseY()+y1*s*k,
-  z:z2,
-  k
- };
-}
-
-
-/* =================================
-   10. 发光粒子
-================================= */
-
-function dot(x,y,r,color,alpha,glow=false){
-
- ctx.globalAlpha=alpha;
- ctx.fillStyle=color;
-
- if(glow){
-  ctx.shadowColor=color;
-  ctx.shadowBlur=10;
- }
-
- ctx.beginPath();
- ctx.arc(x,y,Math.max(.25,r),0,TAU);
- ctx.fill();
-
- ctx.shadowBlur=0;
- ctx.globalAlpha=1;
-}
-
-
-/* =================================
-   11. 背景星云
-================================= */
-
-function drawNebula(){
-
- ctx.save();
- ctx.globalCompositeOperation="screen";
-
- function glow(x,y,r,color){
-
-  const g=ctx.createRadialGradient(x,y,0,x,y,r);
-
-  g.addColorStop(0,color);
-  g.addColorStop(1,"rgba(0,0,0,0)");
-
-  ctx.fillStyle=g;
-  ctx.beginPath();
-  ctx.arc(x,y,r,0,TAU);
-  ctx.fill();
- }
-
- glow(W*.50,H*.46,Math.min(W,H)*.46,
-  "rgba(115,43,173,.19)");
-
- glow(W*.27,H*.55,Math.min(W,H)*.30,
-  "rgba(105,46,160,.10)");
-
- glow(W*.73,H*.48,Math.min(W,H)*.34,
-  "rgba(155,76,205,.10)");
-
- glow(W*.50,H*.80,Math.min(W,H)*.30,
-  "rgba(130,70,170,.12)");
-
- ctx.restore();
-}
-
-
-/* =================================
-   12. 星空闪烁
-================================= */
-
-function drawStars(){
-
- for(const s of stars){
-
-  const a=s.alpha*(
-   .25+.75*(.5+.5*Math.sin(time*1.4+s.phase))
-  );
-
-  dot(s.x*W,s.y*H,s.size,"#e9d8ff",a);
- }
-}
-
-
-/* =================================
-   13. 雪花下落
-================================= */
-
-function drawSnow(list,dt){
-
- for(const s of list){
-
-  s.y+=s.speed*dt;
-
-  s.x+=(
-   s.drift+
-   Math.sin(time*1.2+s.phase)*10
-  )*dt;
-
-  if(s.y>H+8){
-   s.y=-8;
-   s.x=rand(0,W);
-  }
-
-  if(s.x>W+5)s.x=-5;
-  if(s.x<-5)s.x=W+5;
-
-  const flicker=.75+.25*Math.sin(time*1.7+s.phase);
-
-  dot(
-   s.x,
-   s.y,
-   s.size,
-   "#f8efff",
-   s.alpha*flicker,
-   s.foreground&&s.size>1.8
-  );
- }
-}
-
-
-/* =================================
-   14. 地面光环和银河粒子
-================================= */
-
-function drawRings(){
-
- const s=scale();
-
- const radii=[1.25,1.62,2.05,2.55,3.15,3.85,4.55];
-
- for(let j=0;j<radii.length;j++){
-
-  const r=BASE_R*radii[j];
-
-  const points=[];
-
-  for(let i=0;i<=240;i++){
-
-   const a=i/240*TAU;
-
-   points.push(project({
-    x:r*Math.cos(a),
-    y:0,
-    z:r*Math.sin(a)
-   }));
-  }
-
-  ctx.beginPath();
-
-  points.forEach((p,i)=>{
-   if(i===0)ctx.moveTo(p.x,p.y);
-   else ctx.lineTo(p.x,p.y);
-  });
-
-  ctx.strokeStyle=j%2===0
-   ?"rgba(190,120,232,.30)"
-   :"rgba(228,198,247,.16)";
-
-  ctx.lineWidth=1.05*s;
-  ctx.shadowColor="#c274ed";
-  ctx.shadowBlur=8;
-  ctx.stroke();
-  ctx.shadowBlur=0;
- }
-
- for(const g of ground){
-
-  const p=project(g);
-
-  const a=.18+.62*Math.pow(
-   .5+.5*Math.sin(time*1.1+g.phase),2
-  );
-
-  dot(p.x,p.y,g.size*p.k,"#d0a4f0",a,g.size>1);
- }
-}
-
-
-/* =================================
-   15. 树底光晕
-================================= */
-
-function drawBaseGlow(){
-
- const x=W/2;
- const y=baseY();
- const s=scale();
-
- const g=ctx.createRadialGradient(
-  x,y,0,x,y,75*s
- );
-
- g.addColorStop(0,"rgba(255,215,255,.55)");
- g.addColorStop(.18,"rgba(201,119,255,.34)");
- g.addColorStop(.5,"rgba(130,60,190,.13)");
- g.addColorStop(1,"rgba(0,0,0,0)");
-
- ctx.fillStyle=g;
- ctx.beginPath();
- ctx.arc(x,y,75*s,0,TAU);
- ctx.fill();
-}
-
-
-/* =================================
-   16. 树体粒子绘制
-================================= */
-
-function drawTree(){
-
- const list=tree.map(p=>({
-  p,
-  q:project(p)
- }));
-
- // 远处粒子先画，近处粒子后画
- list.sort((a,b)=>b.q.z-a.q.z);
-
- for(const item of list){
-
-  const p=item.p;
-  const q=item.q;
-
-  const flicker=.25+.75*Math.pow(
-   .5+.5*Math.sin(time*p.speed+p.phase),
-   2.6
-  );
-
-  const alpha=flicker*(.62+.38*q.k);
-
-  const r=p.size*q.k*scale()*.92;
-
-  dot(
-   q.x,q.y,r,p.color,alpha,
-   p.sparkle&&flicker>.75
-  );
- }
-}
-
-
-/* =================================
-   17. 树身灯带
-================================= */
-
-function drawSpiralStrand(offset,color,width,blur){
-
- ctx.beginPath();
-
- const segments=750;
-
- for(let i=0;i<=segments;i++){
-
-  const p=spiralPoint(i/segments,offset);
-  const q=project(p);
-
-  if(i===0)ctx.moveTo(q.x,q.y);
-  else ctx.lineTo(q.x,q.y);
- }
-
- ctx.strokeStyle=color;
- ctx.lineWidth=width*scale();
- ctx.shadowColor=color;
- ctx.shadowBlur=blur;
- ctx.stroke();
- ctx.shadowBlur=0;
-}
-
-function drawSpiral(){
-
- drawSpiralStrand(
-  0,"rgba(207,155,255,.82)",1.5,14
- );
-
- drawSpiralStrand(
-  Math.PI,"rgba(255,238,255,.35)",.75,7
- );
-
- for(const b of bulbs){
-
-  const p=project(spiralPoint(b.t,b.offset));
-
-  const f=.15+.85*(
-   .5+.5*Math.sin(time*2.8+b.phase)
-  );
-
-  dot(
-   p.x,p.y,b.size*p.k*scale(),
-   "#f8e3ff",f,true
-  );
- }
-
- for(const g of glitters){
-
-  const p=project(g);
-
-  const f=Math.pow(
-   .5+.5*Math.sin(time*2.2+g.phase),
-   4.8
-  );
-
-  dot(
-   p.x,p.y,g.size*p.k*scale(),
-   "#fffaff",f,true
-  );
- }
-
-
-/* =================================
-   18. 轨道三维坐标
-================================= */
-}
-
-function orbitPoint(o,t){
-
- const a=t*TAU;
-
- const x=Math.cos(a)*o.rx;
- const z=Math.sin(a)*o.rz;
-
- const localY=Math.sin(
-  a*2+o.phase+time*.35
- )*o.wave;
-
- // 旋转轨道平面
- const y=o.y+
-  localY*Math.cos(o.tilt)-
-  z*Math.sin(o.tilt);
-
- const zz=
-  localY*Math.sin(o.tilt)+
-  z*Math.cos(o.tilt);
-
- return {x,y,z:zz};
-}
-
-
-/* =================================
-   19. 前后分层的环绕轨迹
-================================= */
-
-function drawOrbitTrails(front){
-
- for(const o of orbiters){
-
-  const pts=[];
-
-  for(let i=0;i<=320;i++){
-
-   pts.push(project(orbitPoint(o,i/320)));
-  }
-
-  ctx.beginPath();
-
-  let active=false;
-
-  for(let i=0;i<pts.length-1;i++){
-
-   const a=pts[i];
-   const b=pts[i+1];
-
-   // z>0 为后景，z<0 为前景
-   const isFront=(a.z+b.z)/2<0;
-
-   if(isFront!==front){
-    active=false;
-    continue;
-   }
-
-   if(!active){
-    ctx.moveTo(a.x,a.y);
-    active=true;
-   }
-
-   ctx.lineTo(b.x,b.y);
-  }
-
-  ctx.strokeStyle=front
-   ?"rgba(226,181,255,.38)"
-   :"rgba(205,160,248,.18)";
-
-  ctx.lineWidth=1.3*scale();
-  ctx.shadowColor=o.glow;
-  ctx.shadowBlur=front?13:7;
-  ctx.stroke();
-
-  // 动态虚线
-  ctx.save();
-
-  ctx.setLineDash([6*scale(),14*scale()]);
-  ctx.lineDashOffset=-time*o.speed*22;
-
-  ctx.strokeStyle=o.color;
-  ctx.globalAlpha=front?.34:.17;
-  ctx.lineWidth=1.1*scale();
-
-  ctx.beginPath();
-
-  let activeDash=false;
-
-  for(let i=0;i<pts.length-1;i++){
-
-   const a=pts[i];
-   const b=pts[i+1];
-
-   const isFront=(a.z+b.z)/2<0;
-
-   if(isFront!==front){
-    activeDash=false;
-    continue;
-   }
-
-   if(!activeDash){
-    ctx.moveTo(a.x,a.y);
-    activeDash=true;
-   }
-
-   ctx.lineTo(b.x,b.y);
-  }
-
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.globalAlpha=1;
-  ctx.shadowBlur=0;
- }
-}
-
-
-/* =================================
-   20. 环绕运动粒子与彗星
-================================= */
-
-function drawOrbitParticles(front){
-
- for(const o of orbiters){
-
-  // 流动的小光珠
-  for(let k=0;k<24;k++){
-
-   const t=(
-    k/24+
-    time*o.speed*.045
-   )%1;
-
-   const p=project(orbitPoint(o,t));
-
-   const isFront=p.z<0;
-
-   if(isFront!==front)continue;
-
-   const f=.35+.65*(
-    .5+.5*Math.sin(time*2+k)
-   );
-
-   const r=(1+f*1.5)*scale()*p.k;
-
-   dot(
-    p.x,p.y,r,o.color,
-    .35+f*.55,true
-   );
-  }
-
-  // 彗星头部
-  const headT=(time*o.speed*.06%1+1)%1;
-
-  const head=project(orbitPoint(o,headT));
-
-  if((head.z<0)===front){
-
-   // 彗星尾巴
-   for(let j=5;j>=1;j--){
-
-    const tailT=(
-     headT-j*.008+1
-    )%1;
-
-    const tail=project(orbitPoint(o,tailT));
-
-    if((tail.z<0)!==front)continue;
-
-    dot(
-     tail.x,
-     tail.y,
-     (2.5-j*.3)*scale()*tail.k,
-     o.color,
-     .35-j*.045,
-     true
+    const g = c.createRadialGradient(
+        128, 128, 0,
+        128, 128, 128
     );
-   }
 
-   dot(
-    head.x,head.y,
-    3.5*scale()*head.k,
-    "#ffffff",.98,true
-   );
-  }
- }
+    g.addColorStop(0, "rgba(255,255,255,0.9)");
+    g.addColorStop(0.15, "rgba(225,170,255,0.55)");
+    g.addColorStop(0.4, "rgba(157,82,220,0.2)");
+    g.addColorStop(1, "rgba(100,30,160,0)");
+
+    c.fillStyle = g;
+
+    c.fillRect(0, 0, 256, 256);
+
+    const texture = new THREE.CanvasTexture(canvas);
+
+    texture.colorSpace = THREE.SRGBColorSpace;
+
+    return texture;
 }
 
+const glowTexture = createGlowTexture();
 
-/* =================================
-   21. 树顶水晶星星
-================================= */
 
-function drawTopStar(){
+/* =========================================
+   6. 背景星云
+========================================= */
 
- const p=project({
-  x:0,
-  y:-TREE_H-23,
-  z:0
- });
+function addNebula(x, y, z, sx, sy, opacity) {
 
- const s=scale();
+    const material = new THREE.SpriteMaterial({
+        map: glowTexture,
+        color: 0xb77be8,
+        transparent: true,
+        opacity,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
 
- const pulse=1+.09*Math.sin(time*2.2);
+    const sprite = new THREE.Sprite(material);
 
- const h=18*s*pulse;
- const w=16*s*pulse;
+    sprite.position.set(x, y, z);
 
- ctx.save();
- ctx.translate(p.x,p.y);
+    sprite.scale.set(sx, sy, 1);
 
- // 紫白色光晕
- const glow=ctx.createRadialGradient(
-  0,0,0,0,0,h*3.3
- );
+    scene.add(sprite);
 
- glow.addColorStop(0,"rgba(255,255,255,.95)");
- glow.addColorStop(.20,"rgba(239,213,255,.62)");
- glow.addColorStop(.48,"rgba(189,117,255,.26)");
- glow.addColorStop(1,"rgba(160,90,255,0)");
-
- ctx.fillStyle=glow;
- ctx.beginPath();
- ctx.arc(0,0,h*3.3,0,TAU);
- ctx.fill();
-
- // 八角水晶主体
- const grad=ctx.createLinearGradient(-w,-h,w,h);
-
- grad.addColorStop(0,"#ffffff");
- grad.addColorStop(.35,"#f1dcff");
- grad.addColorStop(.70,"#c99af1");
- grad.addColorStop(1,"#ffffff");
-
- ctx.shadowColor="#d8a4ff";
- ctx.shadowBlur=23;
- ctx.fillStyle=grad;
-
- ctx.beginPath();
-
- for(let i=0;i<8;i++){
-
-  const a=-Math.PI/2+i*Math.PI/4;
-  const r=i%2===0?h:h*.38;
-
-  const x=Math.cos(a)*r*.88;
-  const y=Math.sin(a)*r;
-
-  if(i===0)ctx.moveTo(x,y);
-  else ctx.lineTo(x,y);
- }
-
- ctx.closePath();
- ctx.fill();
-
- // 水晶内部切面
- ctx.shadowBlur=0;
- ctx.strokeStyle="rgba(255,255,255,.82)";
- ctx.lineWidth=Math.max(.8,1.1*s);
-
- ctx.beginPath();
-
- ctx.moveTo(0,-h);
- ctx.lineTo(0,h);
-
- ctx.moveTo(-w*.52,-h*.25);
- ctx.lineTo(0,0);
- ctx.lineTo(w*.52,-h*.25);
-
- ctx.moveTo(-w*.52,h*.25);
- ctx.lineTo(0,0);
- ctx.lineTo(w*.52,h*.25);
-
- ctx.stroke();
-
- // 中央高光
- ctx.fillStyle="#ffffff";
- ctx.shadowColor="#ffffff";
- ctx.shadowBlur=12;
-
- ctx.beginPath();
- ctx.arc(0,0,2.5*s,0,TAU);
- ctx.fill();
-
- // 周围闪光
- const tw=.55+.45*Math.sin(time*3.2);
-
- function sparkle(x,y,r,alpha){
-
-  ctx.save();
-  ctx.translate(x,y);
-  ctx.globalAlpha=alpha;
-
-  ctx.strokeStyle="#ffffff";
-  ctx.lineWidth=Math.max(.8,1*s);
-  ctx.shadowColor="#ffffff";
-  ctx.shadowBlur=10;
-
-  ctx.beginPath();
-  ctx.moveTo(-r,0);
-  ctx.lineTo(r,0);
-  ctx.moveTo(0,-r);
-  ctx.lineTo(0,r);
-  ctx.stroke();
-
-  ctx.restore();
- }
-
- sparkle(-w*1.3,-h*.3,4*s,.35+tw*.4);
- sparkle(w*1.3,h*.25,3*s,.25+tw*.35);
- sparkle(0,-h*1.5,3*s,.3+tw*.3);
-
- ctx.restore();
+    return sprite;
 }
 
+addNebula(-4, 4, -8, 9, 7, 0.23);
+addNebula(4, 3, -9, 8, 7, 0.18);
+addNebula(0, 6, -12, 12, 8, 0.15);
+addNebula(0, 1, -8, 7, 5, 0.12);
 
-/* =================================
-   22. 主动画
-================================= */
 
-function animate(timestamp){
+/* =========================================
+   7. 星空粒子
+========================================= */
 
- requestAnimationFrame(animate);
+const starPositions = [];
+const starColors = [];
 
- const dt=lastFrame
-  ?Math.min((timestamp-lastFrame)/1000,.04)
-  :.016;
+for (let i = 0; i < 650; i++) {
 
- lastFrame=timestamp;
- time+=dt;
+    starPositions.push(
+        rand(-15, 15),
+        rand(-4, 13),
+        rand(-18, -9)
+    );
 
- // 自动缓慢旋转
- if(!dragging){
-  targetYaw+=.00085*dt*60;
- }
+    const color = new THREE.Color(
+        Math.random() > 0.55 ? 0xf0dcff : 0xb990e8
+    );
 
- yaw+=(targetYaw-yaw)*.08;
- pitch+=(targetPitch-pitch)*.08;
-
- pitch=clamp(pitch,.08,1.05);
-
- ctx.clearRect(0,0,W,H);
-
- ctx.fillStyle="#03010a";
- ctx.fillRect(0,0,W,H);
-
- // 远景背景
- drawNebula();
- drawStars();
-
- // 远景雪花
- drawSnow(snowBack,dt);
-
- // 地面银河
- drawRings();
- drawBaseGlow();
-
- // 后方轨迹
- drawOrbitTrails(false);
- drawOrbitParticles(false);
-
- // 树体
- drawTree();
- drawSpiral();
-
- // 前方轨迹
- drawOrbitTrails(true);
- drawOrbitParticles(true);
-
- // 树顶水晶
- drawTopStar();
-
- // 近景雪花
- drawSnow(snowFront,dt);
+    starColors.push(
+        color.r,
+        color.g,
+        color.b
+    );
 }
 
-requestAnimationFrame(animate);
+const starGeometry = new THREE.BufferGeometry();
 
+starGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(starPositions, 3)
+);
 
-/* =================================
-   23. 鼠标拖动旋转
-================================= */
+starGeometry.setAttribute(
+    "color",
+    new THREE.Float32BufferAttribute(starColors, 3)
+);
 
-canvas.addEventListener("pointerdown",e=>{
-
- dragging=true;
-
- lastX=e.clientX;
- lastY=e.clientY;
-
- canvas.setPointerCapture(e.pointerId);
+const starMaterial = new THREE.PointsMaterial({
+    size: 0.045,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.8,
+    sizeAttenuation: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
 });
 
-canvas.addEventListener("pointermove",e=>{
+scene.add(
+    new THREE.Points(starGeometry, starMaterial)
+);
 
- if(!dragging)return;
 
- const dx=e.clientX-lastX;
- const dy=e.clientY-lastY;
+/* =========================================
+   8. 树体半透明枝叶层
+========================================= */
 
- targetYaw+=dx*.007;
- targetPitch+=dy*.004;
+for (let level = 0; level < 8; level++) {
 
- targetPitch=clamp(targetPitch,.08,1.05);
+    const y0 = level * H / 8;
 
- lastX=e.clientX;
- lastY=e.clientY;
-});
+    const height = H / 7.2;
 
-function stopDrag(){
- dragging=false;
+    const rBottom =
+        R * Math.pow(1 - level / 8, 0.82);
+
+    const rTop =
+        Math.max(
+            0.025,
+            R * Math.pow(1 - (level + 1) / 8, 0.82) * 0.88
+        );
+
+    const geometry = new THREE.CylinderGeometry(
+        rTop,
+        rBottom,
+        height,
+        20,
+        3,
+        true
+    );
+
+    const material = new THREE.MeshPhysicalMaterial({
+        color: 0x43195c,
+        emissive: 0x37104e,
+        emissiveIntensity: 0.55,
+        transparent: true,
+        opacity: 0.085,
+        roughness: 0.65,
+        metalness: 0.15,
+        side: THREE.DoubleSide,
+        depthWrite: true
+    });
+
+    const layer = new THREE.Mesh(
+        geometry,
+        material
+    );
+
+    layer.position.y = y0 + height / 2;
+
+    treeGroup.add(layer);
 }
 
-canvas.addEventListener("pointerup",stopDrag);
-canvas.addEventListener("pointercancel",stopDrag);
+
+/* =========================================
+   9. 树体粒子生成
+========================================= */
+
+const palette = [
+    "#ffffff",
+    "#f8efff",
+    "#ead5ff",
+    "#d5aaff",
+    "#bd82ed",
+    "#a969d9"
+];
+
+const bodyPoints = [];
+
+for (let i = 0; i < 8500; i++) {
+
+    const t = Math.random() * 0.985;
+
+    const angle = rand(0, TAU);
+
+    const maxR = R * Math.pow(1 - t, 0.78);
+
+    let radial;
+
+    if (Math.random() < 0.62) {
+
+        radial = rand(0.76, 1.0);
+
+    } else {
+
+        radial = Math.sqrt(Math.random()) * 0.84;
+    }
+
+    const branchWave =
+        0.93 +
+        0.07 * Math.sin(angle * 12 + t * 44);
+
+    const r = maxR * radial * branchWave;
+
+    bodyPoints.push({
+        x: r * Math.cos(angle),
+        y: H * t + rand(-0.025, 0.025),
+        z: r * Math.sin(angle),
+        color: palette[
+            Math.floor(Math.random() * palette.length)
+        ]
+    });
+}
 
 
-/* =================================
-   24. 滚轮调整观察角度
-================================= */
+/* =========================================
+   10. 分层枝条粒子
+========================================= */
 
-canvas.addEventListener("wheel",e=>{
+const branchPoints = [];
 
- targetPitch=clamp(
-  targetPitch+e.deltaY*.0004,
-  .08,
-  1.05
- );
+for (let level = 0; level < 8; level++) {
 
-},{passive:true});
+    const t = 0.10 + level * 0.112;
+
+    const centerY = H * t;
+
+    const radius =
+        R * Math.pow(1 - t, 0.80) * 1.10;
+
+    for (let branch = 0; branch < 16; branch++) {
+
+        const angle =
+            branch * TAU / 16 + level * 0.17;
+
+        for (let j = 0; j < 34; j++) {
+
+            const u = j / 33;
+
+            const r = radius * (0.10 + 0.90 * u);
+
+            const droop = 0.23 * u * u;
+
+            branchPoints.push({
+
+                x: r * Math.cos(angle) + rand(-0.035, 0.035),
+
+                y: centerY - droop + rand(-0.035, 0.035),
+
+                z: r * Math.sin(angle) + rand(-0.035, 0.035),
+
+                color: Math.random() < 0.65
+                    ? "#ffffff"
+                    : "#dcb6ff"
+            });
+        }
+    }
+}
+
+
+/* =========================================
+   11. 粒子云生成器
+========================================= */
+
+function createPointCloud(points, size, opacity) {
+
+    const positions = [];
+    const colors = [];
+
+    for (const p of points) {
+
+        positions.push(p.x, p.y, p.z);
+
+        const c = new THREE.Color(p.color);
+
+        colors.push(c.r, c.g, c.b);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+
+    geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(positions, 3)
+    );
+
+    geometry.setAttribute(
+        "color",
+        new THREE.Float32BufferAttribute(colors, 3)
+    );
+
+    const material = new THREE.PointsMaterial({
+
+        size,
+
+        vertexColors: true,
+
+        transparent: true,
+
+        opacity,
+
+        depthWrite: false,
+
+        sizeAttenuation: true,
+
+        blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(
+        geometry,
+        material
+    );
+
+    treeGroup.add(particles);
+
+    return particles;
+}
+
+createPointCloud(bodyPoints, 0.052, 0.90);
+
+createPointCloud(branchPoints, 0.065, 0.92);
+
+
+/* =========================================
+   12. 树干
+========================================= */
+
+const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.17, 0.85, 12),
+    new THREE.MeshStandardMaterial({
+        color: 0x4c2452,
+        roughness: 0.85
+    })
+);
+
+trunk.position.y = 0.35;
+
+treeGroup.add(trunk);
+
+
+/* =========================================
+   13. 圣诞装饰球
+========================================= */
+
+const ornamentGeometry = new THREE.SphereGeometry(
+    1, 16, 12
+);
+
+const ornamentMaterials = [
+
+    new THREE.MeshPhysicalMaterial({
+        color: 0xf5eaff,
+        metalness: 0.85,
+        roughness: 0.16,
+        clearcoat: 1,
+        emissive: 0x8e55ad,
+        emissiveIntensity: 0.5
+    }),
+
+    new THREE.MeshPhysicalMaterial({
+        color: 0xb77be8,
+        metalness: 0.72,
+        roughness: 0.18,
+        clearcoat: 1,
+        emissive: 0x6e2ca0,
+        emissiveIntensity: 0.65
+    }),
+
+    new THREE.MeshPhysicalMaterial({
+        color: 0xffffff,
+        metalness: 0.92,
+        roughness: 0.12,
+        clearcoat: 1
+    })
+];
+
+for (let i = 0; i < 38; i++) {
+
+    const t = rand(0.12, 0.86);
+
+    const maxR = R * Math.pow(1 - t, 0.78);
+
+    const angle = rand(0, TAU);
+
+    const radius = maxR * rand(0.87, 1.02);
+
+    const size = rand(0.045, 0.085);
+
+    const ornament = new THREE.Mesh(
+        ornamentGeometry,
+        ornamentMaterials[
+            Math.floor(Math.random() * ornamentMaterials.length)
+        ]
+    );
+
+    ornament.scale.setScalar(size);
+
+    ornament.position.set(
+        radius * Math.cos(angle),
+        H * t,
+        radius * Math.sin(angle)
+    );
+
+    treeGroup.add(ornament);
+}
+
+
+/* =========================================
+   14. 树身螺旋灯带
+========================================= */
+
+const spiralPoints = [];
+
+for (let i = 0; i <= 1000; i++) {
+
+    const t = i / 1000;
+
+    const angle = t * TAU * 5.2;
+
+    const radius =
+        R * 0.94 * Math.pow(1 - t, 0.83);
+
+    spiralPoints.push(
+        new THREE.Vector3(
+            radius * Math.cos(angle),
+            H * t,
+            radius * Math.sin(angle)
+        )
+    );
+}
+
+const spiralCurve = new THREE.CatmullRomCurve3(
+    spiralPoints
+);
+
+const spiralGeometry = new THREE.TubeGeometry(
+    spiralCurve,
+    1000,
+    0.013,
+    6,
+    false
+);
+
+const spiralMaterial = new THREE.MeshBasicMaterial({
+    color: 0xd9a5ff,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+});
+
+treeGroup.add(
+    new THREE.Mesh(spiralGeometry, spiralMaterial)
+);
+
+// 外层柔光
+const spiralGlow = new THREE.Mesh(
+    new THREE.TubeGeometry(
+        spiralCurve,
+        1000,
+        0.038,
+        6,
+        false
+    ),
+    new THREE.MeshBasicMaterial({
+        color: 0xa95de0,
+        transparent: true,
+        opacity: 0.18,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    })
+);
+
+treeGroup.add(spiralGlow);
+
+
+/* =========================================
+   15. 螺旋灯珠
+========================================= */
+
+const bulbs = [];
+
+const bulbGeometry = new THREE.SphereGeometry(
+    0.026, 10, 8
+);
+
+for (let i = 0; i < 110; i++) {
+
+    const t = i / 110;
+
+    const p = spiralCurve.getPointAt(t);
+
+    const material = new THREE.MeshStandardMaterial({
+
+        color: 0xffffff,
+
+        emissive: 0xdca9ff,
+
+        emissiveIntensity: 1.8,
+
+        metalness: 0.2,
+
+        roughness: 0.2
+    });
+
+    const bulb = new THREE.Mesh(
+        bulbGeometry,
+        material
+    );
+
+    bulb.position.copy(p);
+
+    treeGroup.add(bulb);
+
+    bulbs.push({
+        mesh: bulb,
+        material,
+        phase: rand(0, TAU)
+    });
+}
+
+
+/* =========================================
+   16. 树顶八角水晶星星
+========================================= */
+
+const starShape = new THREE.Shape();
+
+for (let i = 0; i < 16; i++) {
+
+    const angle = -Math.PI / 2 + i * Math.PI / 8;
+
+    const radius = i % 2 === 0 ? 0.34 : 0.145;
+
+    const x = Math.cos(angle) * radius;
+
+    const y = Math.sin(angle) * radius;
+
+    if (i === 0) {
+
+        starShape.moveTo(x, y);
+
+    } else {
+
+        starShape.lineTo(x, y);
+    }
+}
+
+starShape.closePath();
+
+const starGeometry = new THREE.ExtrudeGeometry(
+    starShape,
+    {
+        depth: 0.08,
+        bevelEnabled: true,
+        bevelSegments: 3,
+        steps: 1,
+        bevelSize: 0.025,
+        bevelThickness: 0.025
+    }
+);
+
+const starMaterial = new THREE.MeshPhysicalMaterial({
+
+    color: 0xffffff,
+
+    metalness: 0.55,
+
+    roughness: 0.12,
+
+    clearcoat: 1,
+
+    emissive: 0xdcb0ff,
+
+    emissiveIntensity: 2.1
+});
+
+const starGroup = new THREE.Group();
+
+starGroup.position.set(0, H + 0.36, 0);
+
+treeGroup.add(starGroup);
+
+const starMesh = new THREE.Mesh(
+    starGeometry,
+    starMaterial
+);
+
+starGroup.add(starMesh);
+
+// 水晶切面线
+const edgeGeometry = new THREE.EdgesGeometry(starGeometry);
+
+const starEdges = new THREE.LineSegments(
+    edgeGeometry,
+    new THREE.LineBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.85
+    })
+);
+
+starMesh.add(starEdges);
+
+// 星星周围柔光
+const starHalo = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+        map: glowTexture,
+        color: 0xe2b5ff,
+        transparent: true,
+        opacity: 0.9,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    })
+);
+
+starHalo.scale.set(1.35, 1.35, 1);
+
+starGroup.add(starHalo);
+
+
+/* =========================================
+   17. 地面光晕
+========================================= */
+
+const floorGlow = new THREE.Mesh(
+    new THREE.CircleGeometry(3.0, 80),
+    new THREE.MeshBasicMaterial({
+        map: glowTexture,
+        color: 0xc58bff,
+        transparent: true,
+        opacity: 0.30,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide
+    })
+);
+
+floorGlow.rotation.x = -Math.PI / 2;
+
+floorGlow.position.y = 0.025;
+
+treeGroup.add(floorGlow);
+
+
+/* =========================================
+   18. 地面环形光轨
+========================================= */
+
+const baseRings = [];
+
+[2.55, 3.15, 3.85].forEach((radius, i) => {
+
+    const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(
+            radius,
+            0.009,
+            6,
+            220
+        ),
+        new THREE.MeshBasicMaterial({
+            color: i === 1 ? 0xe0b7ff : 0xa96de2,
+            transparent: true,
+            opacity: 0.28,
+            blending: THREE.AdditiveBlending
+        })
+    );
+
+    ring.rotation.x = Math.PI / 2;
+
+    ring.position.y = 0.04 + i * 0.012;
+
+    treeGroup.add(ring);
+
+    baseRings.push(ring);
+});
+
+
+/* =========================================
+   19. 创建真正的3D环绕轨道
+========================================= */
+
+const orbitSpecs = [
+
+    {
+        y: H * 0.25,
+        rx: 2.65,
+        rz: 2.15,
+        tiltX: 0.45,
+        tiltZ: -0.18,
+        wave: 0.12,
+        phase: 0.2,
+        color: 0xe4b5ff,
+        speed: 0.70
+    },
+
+    {
+        y: H * 0.48,
+        rx: 2.35,
+        rz: 2.75,
+        tiltX: -0.52,
+        tiltZ: 0.20,
+        wave: 0.16,
+        phase: 1.5,
+        color: 0xffffff,
+        speed: -0.55
+    },
+
+    {
+        y: H * 0.70,
+        rx: 1.60,
+        rz: 1.95,
+        tiltX: 0.32,
+        tiltZ: 0.38,
+        wave: 0.10,
+        phase: 2.4,
+        color: 0xd5a1ff,
+        speed: 0.82
+    },
+
+    {
+        y: H * 0.39,
+        rx: 2.90,
+        rz: 2.40,
+        tiltX: -0.25,
+        tiltZ: -0.42,
+        wave: 0.18,
+        phase: 3.1,
+        color: 0xe9caff,
+        speed: -0.36
+    }
+
+];
+
+const orbitSystems = [];
+
+
+function createOrbit(spec) {
+
+    const group = new THREE.Group();
+
+    group.position.y = spec.y;
+
+    group.rotation.set(
+        spec.tiltX,
+        0,
+        spec.tiltZ
+    );
+
+    treeGroup.add(group);
+
+    const points = [];
+
+    for (let i = 0; i < 360; i++) {
+
+        const a = i / 360 * TAU;
+
+        points.push(
+            new THREE.Vector3(
+                spec.rx * Math.cos(a),
+                Math.sin(a * 2 + spec.phase) * spec.wave,
+                spec.rz * Math.sin(a)
+            )
+        );
+    }
+
+    const curve = new THREE.CatmullRomCurve3(
+        points,
+        true,
+        "centripetal"
+    );
+
+    // 外层光晕
+    const glowTube = new THREE.Mesh(
+        new THREE.TubeGeometry(
+            curve,
+            600,
+            0.043,
+            6,
+            true
+        ),
+        new THREE.MeshBasicMaterial({
+            color: spec.color,
+            transparent: true,
+            opacity: 0.16,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        })
+    );
+
+    group.add(glowTube);
+
+    // 内层光带
+    const coreTube = new THREE.Mesh(
+        new THREE.TubeGeometry(
+            curve,
+            600,
+            0.012,
+            6,
+            true
+        ),
+        new THREE.MeshBasicMaterial({
+            color: spec.color,
+            transparent: true,
+            opacity: 0.78,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        })
+    );
+
+    group.add(coreTube);
+
+    // 环绕小光珠
+    const beads = [];
+
+    const beadGeometry = new THREE.SphereGeometry(
+        0.025, 8, 8
+    );
+
+    const beadMaterial = new THREE.MeshStandardMaterial({
+        color: spec.color,
+        emissive: spec.color,
+        emissiveIntensity: 2.0,
+        roughness: 0.2
+    });
+
+    for (let i = 0; i < 22; i++) {
+
+        const bead = new THREE.Mesh(
+            beadGeometry,
+            beadMaterial
+        );
+
+        group.add(bead);
+
+        beads.push(bead);
+    }
+
+    // 彗星头部
+    const cometMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffffff
+    });
+
+    const comet = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 12, 12),
+        cometMaterial
+    );
+
+    group.add(comet);
+
+    // 彗星拖尾
+    const tail = [];
+
+    for (let i = 0; i < 9; i++) {
+
+        const material = new THREE.MeshBasicMaterial({
+            color: spec.color,
+            transparent: true,
+            opacity: 0.65 * (1 - i / 10),
+            blending: THREE.AdditiveBlending
+        });
+
+        const particle = new THREE.Mesh(
+            new THREE.SphereGeometry(
+                0.045 * (1 - i / 13),
+                8,
+                8
+            ),
+            material
+        );
+
+        group.add(particle);
+
+        tail.push(particle);
+    }
+
+    orbitSystems.push({
+        group,
+        curve,
+        beads,
+        comet,
+        tail,
+        speed: spec.speed,
+        phase: spec.phase
+    });
+}
+
+orbitSpecs.forEach(createOrbit);
+
+
+/* =========================================
+   20. 雪花系统
+   远景120片，近景40片
+========================================= */
+
+function createSnow(count, zMin, zMax, size, opacity) {
+
+    const positions = [];
+
+    const speeds = [];
+    const drifts = [];
+    const phases = [];
+
+    for (let i = 0; i < count; i++) {
+
+        positions.push(
+            rand(-6, 6),
+            rand(-0.5, 7.5),
+            rand(zMin, zMax)
+        );
+
+        speeds.push(rand(0.28, 0.85));
+
+        drifts.push(rand(-0.25, 0.25));
+
+        phases.push(rand(0, TAU));
+    }
+
+    const geometry = new THREE.BufferGeometry();
+
+    geometry.setAttribute(
+        "position",
+        new THREE.Float32BufferAttribute(positions, 3)
+    );
+
+    const material = new THREE.PointsMaterial({
+
+        color: 0xf6eaff,
+
+        size,
+
+        transparent: true,
+
+        opacity,
+
+        depthWrite: false,
+
+        sizeAttenuation: true,
+
+        blending: THREE.AdditiveBlending
+    });
+
+    const points = new THREE.Points(
+        geometry,
+        material
+    );
+
+    scene.add(points);
+
+    return {
+        geometry,
+        points,
+        speeds,
+        drifts,
+        phases,
+        positions,
+        count
+    };
+}
+
+const farSnow = createSnow(
+    120,
+    -7,
+    -3.5,
+    0.035,
+    0.48
+);
+
+const nearSnow = createSnow(
+    40,
+    3,
+    5.5,
+    0.075,
+    0.72
+);
+
+
+/* =========================================
+   21. 雪花运动
+========================================= */
+
+function updateSnow(snow, dt) {
+
+    const p = snow.positions;
+
+    for (let i = 0; i < snow.count; i++) {
+
+        const index = i * 3;
+
+        p[index + 1] -= snow.speeds[i] * dt;
+
+        p[index] += (
+            snow.drifts[i] +
+            Math.sin(elapsed * 1.2 + snow.phases[i]) * 0.08
+        ) * dt;
+
+        if (p[index + 1] < -0.8) {
+
+            p[index + 1] = 7.8;
+
+            p[index] = rand(-6, 6);
+        }
+
+        if (p[index] > 6.5) p[index] = -6.5;
+
+        if (p[index] < -6.5) p[index] = 6.5;
+    }
+
+    snow.geometry.attributes.position.needsUpdate = true;
+}
+
+
+/* =========================================
+   22. 更新螺旋灯珠
+========================================= */
+
+function updateBulbs() {
+
+    for (const b of bulbs) {
+
+        const f =
+            0.5 +
+            0.5 * Math.sin(elapsed * 2.8 + b.phase);
+
+        b.material.emissiveIntensity = 0.7 + f * 2.3;
+
+        b.mesh.scale.setScalar(0.75 + f * 0.55);
+    }
+}
+
+
+/* =========================================
+   23. 更新环绕粒子和彗星
+========================================= */
+
+function updateOrbits() {
+
+    for (const system of orbitSystems) {
+
+        const t = (
+            elapsed * system.speed * 0.055 +
+            system.phase / TAU
+        ) % 1;
+
+        const normalizedT = (t + 1) % 1;
+
+        // 环绕光珠
+        system.beads.forEach((bead, i) => {
+
+            const beadT = (
+                normalizedT + i / system.beads.length
+            ) % 1;
+
+            bead.position.copy(
+                system.curve.getPointAt(beadT)
+            );
+
+            const pulse =
+                0.65 +
+                0.35 * Math.sin(elapsed * 2 + i);
+
+            bead.scale.setScalar(pulse);
+        });
+
+        // 彗星头部
+        system.comet.position.copy(
+            system.curve.getPointAt(normalizedT)
+        );
+
+        // 彗星拖尾
+        system.tail.forEach((particle, i) => {
+
+            const tailT = (
+                normalizedT - (i + 1) * 0.007 + 1
+            ) % 1;
+
+            particle.position.copy(
+                system.curve.getPointAt(tailT)
+            );
+        });
+    }
+}
+
+
+/* =========================================
+   24. 星星闪烁
+========================================= */
+
+function updateStar() {
+
+    starGroup.rotation.y =
+        Math.sin(elapsed * 0.6) * 0.12;
+
+    const pulse =
+        1 + 0.06 * Math.sin(elapsed * 2.4);
+
+    starMesh.scale.setScalar(pulse);
+
+    starMaterial.emissiveIntensity =
+        1.5 + 1.2 * (
+            0.5 + 0.5 * Math.sin(elapsed * 2.4)
+        );
+
+    starHalo.material.opacity =
+        0.55 + 0.35 * (
+            0.5 + 0.5 * Math.sin(elapsed * 2.0)
+        );
+}
+
+
+/* =========================================
+   25. 后期辉光效果
+========================================= */
+
+const composer = new EffectComposer(renderer);
+
+composer.addPass(
+    new RenderPass(scene, camera)
+);
+
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(
+        window.innerWidth,
+        window.innerHeight
+    ),
+    1.25,
+    0.70,
+    0.12
+);
+
+composer.addPass(bloomPass);
+
+composer.addPass(new OutputPass());
+
+
+/* =========================================
+   26. 窗口尺寸变化
+========================================= */
+
+window.addEventListener("resize", () => {
+
+    camera.aspect =
+        window.innerWidth / window.innerHeight;
+
+    camera.updateProjectionMatrix();
+
+    renderer.setPixelRatio(
+        Math.min(window.devicePixelRatio, 1.8)
+    );
+
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+
+    composer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+
+    bloomPass.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+});
+
+
+/* =========================================
+   27. 主动画
+========================================= */
+
+function animate() {
+
+    requestAnimationFrame(animate);
+
+    const dt = Math.min(clock.getDelta(), 0.04);
+
+    elapsed += dt;
+
+    // 控制器
+    controls.update();
+
+    // 树身灯珠
+    updateBulbs();
+
+    // 环绕粒子
+    updateOrbits();
+
+    // 树顶星星
+    updateStar();
+
+    // 雪花
+    updateSnow(farSnow, dt);
+
+    updateSnow(nearSnow, dt);
+
+    // 地面光环缓慢旋转
+    baseRings.forEach((ring, i) => {
+
+        ring.rotation.y =
+            Math.sin(elapsed * 0.15 + i) * 0.08;
+    });
+
+    // 光照轻微呼吸
+    light1.intensity =
+        27 + 6 * Math.sin(elapsed * 0.8);
+
+    // 渲染
+    composer.render();
+}
+
+animate();
+
 
 </script>
 </body>
